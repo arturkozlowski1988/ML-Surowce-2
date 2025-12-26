@@ -1,0 +1,10 @@
+streamlit
+pandas
+sqlalchemy
+pyodbc
+scikit-learn
+statsmodels
+google-generativeai
+requests
+python-dotenv
+plotly
