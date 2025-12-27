@@ -54,20 +54,24 @@ Aplikacja **AI Supply Assistant** integruje bazę danych MS SQL z modelami LLM (
 Plik `main.py` (linie 31-34) zawiera domyślne wartości połączenia:
 
 ```python
-manual_server = st.text_input("Server", value="DESKTOP-JHQ03JE\SQL")
-manual_db = st.text_input("Database", value="cdn_test")
-manual_user = st.text_input("User", value="sa")
+# ❌ Obecny kod (NIEBEZPIECZNY):
+manual_server = st.text_input("Server", value="<HARDCODED_SERVER_NAME>")
+manual_db = st.text_input("Database", value="<HARDCODED_DATABASE>")
+manual_user = st.text_input("User", value="<HARDCODED_ADMIN_USER>")
 ```
 
-**Ryzyko**: Ujawnienie nazwy serwera i loginu domyślnego (sa = administrator SQL).
+**Ryzyko**: Ujawnienie nazwy serwera i loginu administratora w kodzie źródłowym.
 
 **⚠️ PROBLEM #2: Connection String w Środowisku**
 
 Connection string w `.env` zawiera hasło w czystej postaci:
 
 ```env
-DB_CONN_STR=mssql+pyodbc://sa:PASSWORD@SERVER/DATABASE?driver=...
+# ❌ Użytkownik z wysokimi uprawnieniami i hasło w plain text:
+DB_CONN_STR=mssql+pyodbc://<DB_USER>:<PASSWORD>@<SERVER>/<DATABASE>?driver=...
 ```
+
+**Zalecenie**: Używaj użytkownika o minimalnych wymaganych uprawnieniach (nie administratora).
 
 **⚠️ PROBLEM #3: API Keys bez Rotacji**
 
@@ -708,11 +712,11 @@ def execute_modification(
         query = '''
         BEGIN TRANSACTION;
         
-        UPDATE <NAZWA_TABELI>
-        SET <KOLUMNA> = :nowa_wartosc
-        WHERE <WARUNEK>;
+        UPDATE <TABLE_NAME>
+        SET <COLUMN_NAME> = :new_value
+        WHERE <CONDITION>;
         
-        -- Weryfikacja przed commit/rollback
+        -- Verification before commit/rollback
         SELECT @@ROWCOUNT as AffectedRows;
         '''
         
