@@ -18,8 +18,7 @@ st.title("🏭 AI Supply Assistant (Produkcja by CTI)")
 
 # Sidebar
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/000000/warehouse-1.png", width=50) 
-    st.header("Konfiguracja")
+    st.markdown("### 📦 Konfiguracja")
     
     # Connection Status
     if "db_status" not in st.session_state:
@@ -144,16 +143,24 @@ try:
             remaining_ids = [x for x in hist_ids if x not in sorted_product_ids]
             dropdown_options.extend(remaining_ids)
             
+            # Default to TOP 5 for readability
+            default_selection = dropdown_options[:5] if len(dropdown_options) >= 5 else dropdown_options
+            
             selected_ids = st.multiselect(
                 "Wybierz surowce do wykresu (Posortowane wg zużycia):", 
                 options=dropdown_options,
+                default=default_selection,
                 format_func=lambda x: product_map.get(x, str(x))
             )
             
             chart_data = df_filtered if not selected_ids else df_filtered[df_filtered['TowarId'].isin(selected_ids)]
             
+            # Map TowarId to product code/name for chart legend
+            chart_data = chart_data.copy()
+            chart_data['ProductLabel'] = chart_data['TowarId'].map(product_map).fillna(chart_data['TowarId'].astype(str))
+            
             import plotly.express as px
-            fig = px.line(chart_data, x='Date', y='Quantity', color='TowarId', title="Zużycie w czasie")
+            fig = px.line(chart_data, x='Date', y='Quantity', color='ProductLabel', title="Zużycie w czasie")
             st.plotly_chart(fig, use_container_width=True)
             
             # --- UPDATED: Purchaser View (Usage & BOM) ---
@@ -331,6 +338,11 @@ try:
         
         # --- MODE SELECTION: RAW MATERIAL vs FINAL PRODUCT ---
         st.markdown("---")
+        
+        # Security info banner
+        if "Gemini" in ai_source:
+            st.info("🔒 **Bezpieczeństwo:** Twoje dane są anonimizowane przed wysłaniem do AI (NIP, PESEL, email)")
+        
         analysis_mode = st.radio("Tryb Analizy:", ["Analiza Surowca (Anomalie)", "Analiza Wyrobu Gotowego (BOM)"], horizontal=True)
         
         if analysis_mode == "Analiza Surowca (Anomalie)":
@@ -441,10 +453,10 @@ try:
                              if "Gemini" in ai_source:
                                  from src.ai_engine.gemini_client import GeminiClient
                                  from src.ai_engine.anonymizer import DataAnonymizer
-                                 # Anonymizer might mask product names if they look like sensitive info, but usually ok.
+                                 anonymizer = DataAnonymizer()
+                                 safe_prompt = anonymizer.anonymize_text(prompt)
                                  client = GeminiClient()
-                                 # We skip anonymizer for product names here assuming internal codes are safe or acceptable risks for this feature
-                                 response_text = client.generate_explanation(prompt)
+                                 response_text = client.generate_explanation(safe_prompt)
                              else:
                                  from src.ai_engine.ollama_client import OllamaClient
                                  client = OllamaClient(model_name=ollama_model)
