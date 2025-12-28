@@ -4,6 +4,44 @@ Wszystkie znaczące zmiany w projekcie są dokumentowane w tym pliku.
 
 Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.0.0/).
 
+## [1.3.0] - 2024-12-28
+
+### Dodano
+
+- **🤖 Aktualizacja Modelu LLM - Qwen2.5-7B-Instruct**:
+  - Ustawiono model 7B jako domyślny (zamiast 3B)
+  - Wyższa jakość odpowiedzi i lepsze rozumowanie
+  - Model GGUF (~3.55 GB) z kwantyzacją Q3_K_M
+  - Zachowano backup model 3B do szybkich analiz
+  
+- **📊 Porównanie Modeli**:
+  - Przeprowadzono testy porównawcze modeli (Qwen2.5 3B vs 7B)
+  - Dokumentacja wyników w `models/MODEL_COMPARISON.md`
+  - Skrypt `scripts/compare_models.py` do samodzielnych testów
+
+### Zmieniono
+
+- **⚙️ Konfiguracja `.env`**:
+  - `LOCAL_LLM_PATH` teraz wskazuje na model 7B
+  - Dodano komentarze z dostępnymi modelami
+
+### Usunięto
+
+- **🧹 Czyszczenie Projektu**:
+  - Usunięto wszystkie foldery `__pycache__/` (8 folderów)
+  - Usunięto `test_output.txt` (nieaktualny log błędów)
+  - Usunięto pusty plik `OPTIMIZATION_ROADMAP.md`
+  - Usunięto `models/comparison_results.txt` (przeniesiono do dokumentacji)
+  - Wyczyszczono katalog `logs/` z plików `.log`
+
+### Dokumentacja
+
+- **📝 Aktualizacja Dokumentacji**:
+  - `models/DOWNLOAD_STATUS.md` - status dostępnych modeli
+  - `models/MODEL_COMPARISON.md` - pełne porównanie modeli
+
+---
+
 ## [1.2.0] - 2024-12-27
 
 ### Dodano

@@ -51,11 +51,16 @@ Edytuj `.env`:
 - `LOCAL_LLM_PATH` - ścieżka do modelu GGUF (opcjonalnie, dla lokalnego AI)
 
 **NOWE: Lokalny Model AI (Grudzień 2024)**
+
 ```bash
-# Model: Qwen2.5-3B-Instruct (Zalecany - najnowszy, 32k kontekst)
-LOCAL_LLM_PATH=models/qwen2.5-3b-instruct-q4_k_m.gguf
+# Domyślny model: Qwen2.5-7B-Instruct (Zalecany - wyższa jakość)
+LOCAL_LLM_PATH=models/qwen2.5-7b-instruct-q3_k_m.gguf
+
+# Alternatywnie: Qwen2.5-3B-Instruct (szybszy, mniejsze wymagania)
+# LOCAL_LLM_PATH=models/qwen2.5-3b-instruct-q4_k_m.gguf
 ```
-Model już skonfigurowany i gotowy do użycia! 🚀
+
+Oba modele skonfigurowane i gotowe do użycia! 🚀
 
 ### 4. Uruchomienie
 

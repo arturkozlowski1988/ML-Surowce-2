@@ -36,4 +36,4 @@ LOCAL_LLM_PATH=models/qwen2.5-3b-instruct-q4_k_m.gguf
 python scripts/compare_models.py
 ```
 
-Wyniki w: `models/comparison_results.txt`
+Szczegółowe porównanie modeli: [MODEL_COMPARISON.md](MODEL_COMPARISON.md)
