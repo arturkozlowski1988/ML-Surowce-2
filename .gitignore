@@ -54,6 +54,8 @@ update_config.py
 *.joblib
 models/*.pkl
 models/*.joblib
+*.gguf
+models/*.gguf
 
 # Jupyter
 notebooks/.ipynb_checkpoints/
