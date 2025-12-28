@@ -57,23 +57,54 @@ class DatabaseConnector:
     _cache_timestamps = {}
     _cache_ttl = 300  # 5 minutes default TTL
     
-    def __init__(self, enable_diagnostics: bool = True):
+    def __init__(self, enable_diagnostics: bool = True, enable_audit: bool = True):
         load_dotenv()
         self.conn_str = os.getenv('DB_CONN_STR')
         if not self.conn_str:
             raise ValueError("DB_CONN_STR not found in .env variables")
         self.engine = self._create_db_engine()
         self.diagnostics = QueryDiagnostics() if enable_diagnostics else None
+        
+        # Initialize audit logging
+        self._audit = None
+        if enable_audit:
+            try:
+                from src.security.audit import SecurityAuditLog, AuditEventType
+                self._audit = SecurityAuditLog()
+                self._audit.log(
+                    AuditEventType.SESSION_START,
+                    details={"component": "DatabaseConnector"}
+                )
+            except ImportError:
+                logger.debug("Audit logging not available")
+        
         logger.info("DatabaseConnector initialized successfully")
 
     def _create_db_engine(self):
         """
-        Creates SQLAlchemy engine.
-        Handles ODBC connection string formatting if needed.
+        Creates SQLAlchemy engine with optimized connection pooling.
+        
+        Pool settings:
+        - pool_pre_ping: Verify connections before use (handles stale connections)
+        - pool_size: Base number of persistent connections (default: 5)
+        - max_overflow: Additional connections allowed during peak (default: 10)
+        - pool_recycle: Recycle connections after N seconds to prevent stale (default: 3600)
+        - pool_timeout: Seconds to wait for connection from pool (default: 30)
         """
         try:
-            # If using standard connection string format
-            engine = create_engine(self.conn_str, pool_pre_ping=True)
+            engine = create_engine(
+                self.conn_str,
+                pool_pre_ping=True,           # Verify connections before use
+                pool_size=5,                   # Base pool size
+                max_overflow=10,               # Extra connections during peak
+                pool_recycle=3600,             # Recycle connections every hour
+                pool_timeout=30,               # Wait 30s for connection from pool
+                echo=False,                    # Set True for SQL debugging
+            )
+            logger.info(
+                f"Database engine created with pool: "
+                f"size=5, max_overflow=10, recycle=3600s"
+            )
             return engine
         except Exception as e:
             logger.error(f"Error creating engine: {e}")
@@ -148,23 +179,33 @@ class DatabaseConnector:
             logger.error(f"Connection test failed: {e}")
             return False
 
-    def get_historical_data(self, use_cache: bool = True) -> pd.DataFrame:
+    def get_historical_data(self, use_cache: bool = True, date_from: str = None, date_to: str = None) -> pd.DataFrame:
         """
         Fetches historical production data aggregated by week.
         Joins CtiZlecenieElem with CtiZlecenieNag and CDN.Towary.
         Strictly filters for Raw Materials (CZE_Typ IN (1, 2)).
         
+        PERFORMANCE: Uses date range filtering when provided to reduce data transfer.
+        
         Args:
             use_cache: If True, returns cached data if available (default: True)
+            date_from: Optional start date filter (YYYY-MM-DD format)
+            date_to: Optional end date filter (YYYY-MM-DD format)
+            
+        Note on NOLOCK: Used for read-only reporting queries. 
+        Risk: May read uncommitted data (dirty reads). 
+        Benefit: Does not block production ERP operations.
         """
-        cache_key = "historical_data"
+        # Create cache key based on date range
+        cache_key = f"historical_data_{date_from}_{date_to}" if (date_from or date_to) else "historical_data"
         
         if use_cache:
             cached = self._get_from_cache(cache_key)
             if cached is not None:
                 return cached
         
-        query = """
+        # Build query with optional date filters for performance
+        base_query = """
         SELECT 
             DATEPART(ISO_WEEK, n.CZN_DataRealizacji) as Week,
             YEAR(n.CZN_DataRealizacji) as Year,
@@ -176,15 +217,30 @@ class DatabaseConnector:
         WHERE n.CZN_DataRealizacji IS NOT NULL 
           AND e.CZE_Typ IN (1, 2)
           AND t.Twr_Typ != 2
+        """
+        
+        params = {}
+        
+        # Add date range filters if provided (PERFORMANCE OPTIMIZATION)
+        if date_from:
+            base_query += " AND n.CZN_DataRealizacji >= :date_from"
+            params['date_from'] = date_from
+        if date_to:
+            base_query += " AND n.CZN_DataRealizacji <= :date_to"
+            params['date_to'] = date_to
+            
+        base_query += """
         GROUP BY YEAR(n.CZN_DataRealizacji), DATEPART(ISO_WEEK, n.CZN_DataRealizacji), e.CZE_TwrId
         ORDER BY Year, Week
         """
-        df = self.execute_query(query, query_name="get_historical_data")
+        
+        df = self.execute_query(base_query, params=params if params else None, query_name="get_historical_data")
         
         if not df.empty:
             self._set_cache(cache_key, df)
         
         return df
+
 
     def get_current_stock(self, use_cache: bool = True) -> pd.DataFrame:
         """

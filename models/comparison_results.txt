@@ -1,0 +1,187 @@
+MODEL COMPARISON RESULTS
+================================================================================
+
+
+Model: Qwen2.5 3B Instruct
+Load Time: 2.57s
+--------------------------------------------------------------------------------
+
+Test: Analiza Trendu Zużycia
+Time: 29.85s, Words: 169, Speed: 5.7 w/s
+Response:
+**Krótkie podsumowanie trendu:** Wzrost zużycia surowca STAL 316L wynosi 35% w ostatnich 3 miesiącach, co oznacza istotny rosnący trend.
+
+• **Przyczyny anomalii:**
+  - **1.** Wysokie zużycie surowca (obecne zużycie wynosi 3375 kg/miesiąc)
+  - **2.** Niedobitka zapasów (dni do wyczerpania zapasu wynosi 12 dni)
+  - **3.** Wyższy rynek lub wzrost wymagań produkcyjnych
+  - **4.** Niedostateczność planowania zakupu lub reagowania na zmiany na rynku
+
+• **Rekomendacja działania:**
+  - **1.** Przedstawienie wizji strategii zakupu dla STAL 316L w ramach globalnej strategii produkcji, aby skoncentrować się na kontrolowaniu ruchu surowca.
+  - **2.** Rozszerzenie analizy rygorystycznej, aby zebrać więcej danych i przyczynić się do podania bardziej precyzyjnych zaleceń.
+  - **3.** Zorganizowanie konferencji z konsultantami lub expertami w dziedzinie surowców, aby dostarczyć bardziej szczegółową analizę i zalecenia.
+  - **4.** Wprowadzenie mechanizmów monitorowania i praktyk przestrzegania zasobów w celu poprawy kontroli ruchu surowca.
+  - **5.** Planowanie zakupu na przyszły okres, aby uniknąć niedobitków zapasów.
+
+• **Kontekst:**
+  - Odpowiadanie tym zaleceniom może przyczynić się do poprawy kontroli ruchu surowca, poprawy efektywności i poprawy efektywności operacyjnej firmy produkcyjnej.
+--------------------------------------------------------------------------------
+
+Test: Wykrywanie Anomalii
+Time: 23.09s, Words: 159, Speed: 6.9 w/s
+Response:
+• Krótkie podsumowanie trendu: Zużycie surowca Farba EPOKSYDOWA RAL 7035 wzrosło gwałtownie w ciągu 2 tygodni, z normalnej 50 litrów na tydzień do 180 litrów (260% normy).
+• Przyczyny anomalii:
+- 1. Zmiana w wymaganiach klienta lub budżetze produkcji
+- 2. Wykrycie nowego produkcyjnego procesu z większą konsumpcją surowca
+- 3. Przezroczystość lub nieefektywność istniejącego zasobu surowca
+- 4. Zmiany w dostawach od producenta z większą ilością na jednym wierszu
+• Rekomendacja działania:
+- 1. Zorganizuj konwersja zasobów i dostaw do zmniejszenia zużycia
+- 2. Zaproponuj zmiany w wymaganiach klienta lub budżetze produkcji
+- 3. Zbadaj nowe produkcyjne procesy z mniejszą konsumpcją surowca
+- 4. Rozważ skierowanie do producenta zasobów surowca do mniejszej ilości na jednym wierszu
+- 5. Zorganizuj konwersję zasobów i dostaw do zmniejszenia zużycia
+- 6. Zbadaj przejrzystość i efektywność istniejących zasobów surowca
+- 7. Rozważ zmiany w dostawach od producenta do większej ilości na jednym wierszu
+- 8. Zbadaj i weryfikuj wszystkie przyczyny anomalii •
+--------------------------------------------------------------------------------
+
+Test: Optymalizacja Zakupów
+Time: 33.55s, Words: 215, Speed: 6.4 w/s
+Response:
+• Krótkie podsumowanie trendu:
+   - Aluminium AL6082: zużycie stabilne
+   - Guma NBR: zużycie zmienne
+   - PVC: zużycie rosnące
+
+• Przyczyny anomalii (lista punktowana):
+   - Aluminium AL6082: lead time 4 tygodnie (duży lead time nie przeszkadza, zasada – zużycie stabilne)
+   - Guma NBR: zużycie zmienne (pamiętaj o kontrolę zużycia, może to być czynnik wpływający na zmienne zużycie)
+   - PVC: zużycie rosnące (lead time 6 tygodni, w tym kontekście trend rosnącego zużycia jest nieprawdopodobny)
+
+• Rekomendacja działania:
+   - Aluminium AL6082:
+      • Zamawiaj regularnie w dużych ilościach (naprzemiennie w 4 tygodnach) do zapewnienia stabilnego dostępu.
+      • Planuj zakupy w 12-miesięcznym zakresie, aby uniknąć pękania.
+   - Guma NBR:
+      • Kontroluj zużycie regularnie (np. raz w tygodzine) i planuj zakupy zgodnie z aktualnym zużyciem.
+      • Planuj zakupy w 12-miesięcznym zakresie, aby uniknąć pękania.
+   - PVC:
+      • Planuj zakupy w 12-miesięcznym zakresie, aby uniknąć pękania.
+      • Planuj zakupy zgodnie z trendem rosnącym zużycia, ale kontroluj to regularnie i planuj w 12-miesięcznym zakresie.
+      • Możesz zbadac możliwość planowania zakupów w mniejszych ilościach w mniejszych interwalach, aby zminimalizować ryzyko pękania.
+
+• Dodatkowe zalecenia dla działu zakupów:
+   - Używanie technologii analizy zużycia i predykcji do poprawy kontroli i planowania zakupów.
+   - Planowanie i kontrola zakupów zgodnie z trendem rosnącym zużycia PVC.
+   - Kontrola i analiza trendu rosnącego zużycia PVC w celu zminimalizowania ryzyka pękania.
+--------------------------------------------------------------------------------
+
+Model: Qwen2.5 7B Instruct
+Load Time: 0.72s
+--------------------------------------------------------------------------------
+
+Test: Analiza Trendu Zużycia
+Time: 53.14s, Words: 156, Speed: 2.9 w/s
+Response:
+### Analiza Zużycia Surowca STAL 316L
+
+#### Krótkie Podsumowanie Trendu
+W ostatnim okresie wzrosło zużycie surowca STAL 316L o 35%, co skutkuje zwiększeniem średniego zużycia z 2500 kg/miesiąc do 3375 kg/miesiąc. 
+
+#### Przyczyny Anomalii
+• Szerokość przekroju produktów zwiększyła się, co wpłynęło na wzrost zużycia.
+• Zmiany w zapotrzebowaniu na produkty, które zawierają surowiec STAL 316L.
+• Zwiększenie efektywności w produkcji, co wywołało besoinę dodatkowych materiałów.
+• Potencjalne problemy techniczne lub zmiany w procesach produkcji.
+
+#### Rekomendacja Działu Zakupów
+• Zwiększenie zapasów surowca STAL 316L, aby zapewnić stabilność produkcji. W przypadku obecnej szybkości wzrostu zużycia, zaleca się zwiększenie zapasów o minimum 20%.
+• Przejrzyj i dostosuj plany produkcji, aby uniknąć nadmiernego zużycia surowca.
+• Zakup dodatkowego surowca w przyszłym okresie, aby zapewnić przyszłe potrzeby.
+• Zaktualizuj modele przewidywania zużycia, uwzględniając zmiany w procesach produkcyjnych.
+• Rozważ zwiększenie zasobów logistycznych, aby szybciej dostarczać surowce w przypadku nadmiernego zużycia.
+
+Te kroki pomogą stabilizować zapasy i zapewnić płynność produkcji.
+--------------------------------------------------------------------------------
+
+Test: Wykrywanie Anomalii
+Time: 45.29s, Words: 175, Speed: 3.9 w/s
+Response:
+- Krótkie podsumowanie trendu:
+  Wzrost zużycia surowca Farba EPOKSYDOWA RAL 7035 o 260% normy w ciągu 2 tygodni.
+
+- Przyczyny anomalii:
+  • Zmiana produkcji: Zwiększenie ilości produkcji tych produktów, które wymagają tej farby.
+  • Błąd pomiarów: Błędy w systemach pomiarowych zużycia.
+  • Zmiana procesu produkcyjnego: Implementacja nowego procesu, wymagającego większej ilości tej farby.
+  • Błąd w systemie zamówień: Brakaktualizacji zamówień lub błędne zapisy.
+  • Zmiana dostawcy: Wpływ zmiany dostawcy na ilość dostarczanej farby.
+
+- Rekomendacja działania:
+  • Zbadanie zapisów zamówień i dostaw, aby upewnić się, że nie ma błędów w systemie.
+  • Skontaktowanie się z działem produkcji, aby zrozumieć zmiany w produkcji i wykorzystaniu tej farby.
+  • Weryfikacja pomiarów zużycia farby, aby wykluczyć błędy w systemach.
+  • Skontaktowanie się z dostawcą, aby upewnić się, że dostarczana jest odpowiednia ilość farby.
+  • Monitorowanie trendu w ciągu kilku dni, aby potwierdzić czy wzrost zużycia jest stały.
+  • Jeśli wzrost zużycia jest potwierdzony, przeprowadzenie analizy rygorystycznej, aby zrozumieć przyczynę.
+  • Przygotowanie planu działania, jeśli wzrost zużycia jest spowodowany zasadniczą zmianą produkcji lub procesu, aby dostosować zapasy i zamówienia.
+--------------------------------------------------------------------------------
+
+Test: Optymalizacja Zakupów
+Time: 79.97s, Words: 313, Speed: 3.9 w/s
+Response:
+### Przeanaliza Strategii Zakupowej dla Surowców
+
+#### 1. Aluminium AL6082
+- **Lead Time**: 4 tygodnie
+- **Zużycie**: Stabilne
+
+#### 2. Guma NBR
+- **Lead Time**: 2 tygodnie
+- **Zużycie**: Zmienne (+/- 40%)
+
+#### 3. Plastik PVC
+- **Lead Time**: 6 tygodni
+- **Zużycie**: Rosnące (trend +15%/m-c)
+
+### Przyczyny Anomalii
+
+#### 1. Aluminium AL6082
+• Nie ma specyficznego powodzenia, ze względu na stabilność zużycia i długą datę dostawy.
+
+#### 2. Guma NBR
+• Zmienne zużycie może prowadzić do niepewności w zapasach, co może wpływać na produkcję.
+
+#### 3. Plastik PVC
+• Rosnące zużycie sugeruje potrzebę regularnej dostosowywania zapasów, aby uniknąć niedostatków.
+
+### Optymalna Strategia Zakupowa
+
+#### 1. Aluminium AL6082
+• Utrzymuj stałą ilość zakupów, zgodnie z planowanym zużyciem.
+• Zakupy realizować co 4 tygodnie, aby zachować synchronizację z datą dostawy.
+
+#### 2. Guma NBR
+• Zastosuj strategię zakupu z dostosowaniem. 
+• Monitoruj zużycie regularnie (co miesiąc) i dostosuj ilość zakupów w zależności od zmian w zużyciu.
+• W przypadku dużych zmian w zużyciu (ponad 40%) podejmij szybką reakcję na zmiany.
+
+#### 3. Plastik PVC
+• Zastosuj strategię zakupu z dostosowaniem, aby zmieścić rosnące zużycie.
+• Zakupy realizować co 1-2 tygodnie, aby zachować dostosowanie do szybko zmieniającego się zużycia.
+• Regularnie monitoruj trend zużycia (co miesiąc) i dostosuj ilość zakupów, aby uniknąć niedostatków.
+
+### Rekomendacje dla Działu Zakupów
+
+1. **Monitorowanie zużycia**: Regularnie monitoruj zużycie surowców, szczególnie Gumy NBR i Plastiku PVC.
+2. **Dostosowanie ilości zakupów**: Dla Gumy NBR i Plastiku PVC, dostosuj ilość zakupów w zależności od zmian w zużyciu.
+3. **Zakupy regularne**: Dla Aluminium AL6082, realizować zakupy co 4 tygodnie. Dla innych surowców, regularne zakupy co 1-2 tygodnie.
+4. **Dokumentacja**: Dokumentuj zmiany w zużyciu i odpowiednie reakcje na zmiany w zapasach.
+
+### Podsumowanie
+
+Strategia zakupowa powinna być dostosowana do specyfiki każdego surowca, z uwzględnieniem długości daty dostawy i zmienności zużycia. Regularne monitorowanie zużycia i dostosowanie ilości zakupów są kluczowe, aby zapewnić płynność procesu produkcyjnego.
+--------------------------------------------------------------------------------

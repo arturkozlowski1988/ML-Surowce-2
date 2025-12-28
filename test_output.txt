@@ -1,0 +1,38 @@
+============================================================
+ML PIPELINE COMPREHENSIVE TEST SUITE
+============================================================
+Started: 2025-12-28T12:29:14.654764
+
+----------------------------------------
+TESTING: Preprocessing Module
+----------------------------------------
+Traceback (most recent call last):
+  File "E:\ML Surowce 2\scripts\test_ml_pipeline.py", line 98, in test_preprocessing
+    results.add_pass("prepare_time_series", f"Created Date column for {len(df_ts)} rows")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\ML Surowce 2\scripts\test_ml_pipeline.py", line 25, in add_pass
+    print(self.details[-1])
+    ~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Artut\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1250.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 0: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "E:\ML Surowce 2\scripts\test_ml_pipeline.py", line 508, in <module>
+    exit(main())
+         ~~~~^^
+  File "E:\ML Surowce 2\scripts\test_ml_pipeline.py", line 482, in main
+    df = test_preprocessing(results)
+  File "E:\ML Surowce 2\scripts\test_ml_pipeline.py", line 115, in test_preprocessing
+    results.add_fail("Preprocessing Import", str(e))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\ML Surowce 2\scripts\test_ml_pipeline.py", line 30, in add_fail
+    print(self.details[-1])
+    ~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Artut\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1250.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 0: character maps to <undefined>
