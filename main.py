@@ -1,6 +1,6 @@
 """
 AI Supply Assistant - Main Application Entry Point
-Version: 1.1.0
+Version: 1.2.0
 
 This module serves as a thin wrapper that initializes the Streamlit app
 and delegates to modular GUI components.
@@ -33,10 +33,14 @@ st.set_page_config(
 st.title("🏭 AI Supply Assistant (Produkcja by CTI)")
 
 
-@st.cache_resource
-def get_db_connection():
-    """Creates cached database connection."""
-    return DatabaseConnector()
+def get_db_connection(database_name: str = None):
+    """Creates database connection with optional database name."""
+    cache_key = f"db_connection_{database_name or 'default'}"
+    
+    if cache_key not in st.session_state:
+        st.session_state[cache_key] = DatabaseConnector(database_name=database_name)
+    
+    return st.session_state[cache_key]
 
 
 def main():
@@ -48,12 +52,22 @@ def main():
             rerun_callback=st.rerun
         )
         
-        # Get DB Connection
-        db = get_db_connection()
+        # Get DB Connection with selected database
+        database_name = sidebar_state.get('database_name', 'cdn_test')
+        selected_warehouses = sidebar_state.get('selected_warehouses', [])
         
-        # Global Data Fetch
+        db = get_db_connection(database_name)
+        
+        # Show active database and warehouse info
+        if selected_warehouses:
+            st.info(f"🗄️ Baza: **{database_name}** | 🏭 Magazyny: {len(selected_warehouses)} wybranych")
+        else:
+            st.info(f"🗄️ Baza: **{database_name}** | 🏭 Wszystkie magazyny")
+        
+        # Global Data Fetch (with warehouse filtering)
         with st.spinner("Pobieranie danych globalnych..."):
-            df_stock = db.get_current_stock()
+            warehouse_ids = selected_warehouses if selected_warehouses else None
+            df_stock = db.get_current_stock(warehouse_ids=warehouse_ids)
             product_map = {}
             sorted_product_ids = []
             
@@ -78,7 +92,8 @@ def main():
                 start_date=start_date,
                 end_date=end_date,
                 prepare_time_series=prepare_time_series,
-                fill_missing_weeks=fill_missing_weeks
+                fill_missing_weeks=fill_missing_weeks,
+                warehouse_ids=warehouse_ids
             )
             
         elif app_mode == "Predykcja":
@@ -98,7 +113,8 @@ def main():
                 db=db,
                 product_map=product_map,
                 sorted_product_ids=sorted_product_ids,
-                prepare_time_series=prepare_time_series
+                prepare_time_series=prepare_time_series,
+                warehouse_ids=warehouse_ids
             )
             
     except Exception as e:

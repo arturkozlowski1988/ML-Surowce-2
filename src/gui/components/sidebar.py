@@ -115,10 +115,36 @@ def render_sidebar(db_connector, rerun_callback: Callable) -> dict:
         rerun_callback: Function to call for page rerun (st.rerun)
     
     Returns:
-        dict with keys: app_mode, start_date, end_date, db_status
+        dict with keys: app_mode, start_date, end_date, db_status, database_name, selected_warehouses
     """
     with st.sidebar:
         st.markdown("### 📦 Konfiguracja")
+        
+        # Database Selector (NEW)
+        st.markdown("**🗄️ Baza Danych**")
+        available_databases = ["cdn_test", "cdn_mietex"]
+        
+        if "selected_database" not in st.session_state:
+            st.session_state["selected_database"] = "cdn_test"
+        
+        selected_db = st.selectbox(
+            "Wybierz bazę:",
+            available_databases,
+            index=available_databases.index(st.session_state["selected_database"]),
+            key="database_selector"
+        )
+        
+        # Track database change for rerun
+        if selected_db != st.session_state["selected_database"]:
+            st.session_state["selected_database"] = selected_db
+            st.session_state["db_status"] = False  # Reset connection
+            st.session_state.pop("selected_warehouses", None)  # Clear warehouse selection
+            st.session_state.pop("analysis_viewmodel", None)  # Clear cached viewmodel
+            # Clear DB connection cache for all databases
+            keys_to_remove = [k for k in st.session_state.keys() if k.startswith("db_connection_")]
+            for key in keys_to_remove:
+                st.session_state.pop(key, None)
+            rerun_callback()
         
         # Connection Status
         if "db_status" not in st.session_state:
@@ -127,7 +153,7 @@ def render_sidebar(db_connector, rerun_callback: Callable) -> dict:
         # Connection Settings
         def handle_connect():
             try:
-                db_conn = db_connector()
+                db_conn = db_connector(database_name=st.session_state["selected_database"])
                 if db_conn.test_connection():
                     st.session_state["db_status"] = True
                     st.success("Połączono!")
@@ -142,13 +168,53 @@ def render_sidebar(db_connector, rerun_callback: Callable) -> dict:
         # Auto-connect if not connected
         if not st.session_state["db_status"]:
             try:
-                db_conn = db_connector()
+                db_conn = db_connector(database_name=st.session_state["selected_database"])
                 if db_conn.test_connection():
                     st.session_state["db_status"] = True
             except:
                 pass
         
         render_connection_status(st.session_state["db_status"])
+        
+        # Warehouse Selector (NEW)
+        st.divider()
+        st.markdown("**🏭 Magazyny**")
+        
+        if "selected_warehouses" not in st.session_state:
+            st.session_state["selected_warehouses"] = []
+        
+        if st.session_state["db_status"]:
+            try:
+                db_conn = db_connector(database_name=st.session_state["selected_database"])
+                df_warehouses = db_conn.get_warehouses(only_with_stock=True)
+                
+                if not df_warehouses.empty:
+                    warehouse_options = dict(zip(
+                        df_warehouses['MagId'], 
+                        df_warehouses['Symbol'] + " - " + df_warehouses['Name']
+                    ))
+                    
+                    selected_wh = st.multiselect(
+                        "Filtruj po magazynach:",
+                        options=list(warehouse_options.keys()),
+                        default=st.session_state.get("selected_warehouses", []),
+                        format_func=lambda x: warehouse_options.get(x, str(x)),
+                        help="Zostaw puste, aby pokazać wszystkie magazyny"
+                    )
+                    st.session_state["selected_warehouses"] = selected_wh
+                    
+                    # Warehouse summary
+                    if selected_wh:
+                        total_stock = df_warehouses[df_warehouses['MagId'].isin(selected_wh)]['TotalStock'].sum()
+                        st.caption(f"📦 Wybrano: {len(selected_wh)} mag. | Stan: {total_stock:,.0f}")
+                    else:
+                        st.caption(f"📦 Wszystkie magazyny ({len(df_warehouses)})")
+                else:
+                    st.info("Brak magazynów ze stanem > 0")
+            except Exception as e:
+                st.warning(f"Nie można pobrać magazynów: {e}")
+        else:
+            st.info("Połącz się z bazą, aby wybrać magazyny")
         
         st.divider()
         app_mode = render_mode_selector()
@@ -157,11 +223,13 @@ def render_sidebar(db_connector, rerun_callback: Callable) -> dict:
         start_date, end_date = render_date_filters()
         
         st.markdown("---")
-        st.caption("v1.1.0 | Produkcja by CTI")
+        st.caption(f"v1.2.0 | {st.session_state['selected_database']}")
         
         return {
             'app_mode': app_mode,
             'start_date': start_date,
             'end_date': end_date,
-            'db_status': st.session_state["db_status"]
+            'db_status': st.session_state["db_status"],
+            'database_name': st.session_state["selected_database"],
+            'selected_warehouses': st.session_state.get("selected_warehouses", [])
         }

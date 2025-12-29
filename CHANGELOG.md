@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.2.0] - 2025-12-29
+
+### Added
+
+- **Multi-database support** - Switch between cdn_test and cdn_mietex databases
+- **Warehouse filtering** - Filter analysis by specific warehouses (magazyny)
+- **Warehouse multiselect** in sidebar with stock summary
+- **Database selector** in sidebar for easy switching
+- **Info bar** showing active database and selected warehouse count
+- `get_warehouses()` method in DatabaseConnector
+- `warehouse_ids` parameter in stock and BOM queries
+
+### Changed
+
+- Updated `get_current_stock()` to support warehouse filtering
+- Updated `get_bom_with_stock()` to support warehouse filtering
+- Modified sidebar to include database and warehouse configuration
+- Version bumped to 1.2.0
+
+---
+
 Wszystkie znaczące zmiany w projekcie są dokumentowane w tym pliku.
 
 Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.0.0/).

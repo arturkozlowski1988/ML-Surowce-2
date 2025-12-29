@@ -29,7 +29,8 @@ def render_analysis_view(
     start_date,
     end_date,
     prepare_time_series,
-    fill_missing_weeks
+    fill_missing_weeks,
+    warehouse_ids: list = None
 ):
     """
     Renders the historical data analysis view with MVVM architecture.
@@ -42,6 +43,7 @@ def render_analysis_view(
         end_date: Filter end date
         prepare_time_series: Preprocessing function
         fill_missing_weeks: Preprocessing function
+        warehouse_ids: Optional list of warehouse IDs to filter stock
     """
     st.subheader("📊 Analiza Historyczna Produkcji")
     

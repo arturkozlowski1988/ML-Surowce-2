@@ -57,11 +57,24 @@ class DatabaseConnector:
     _cache_timestamps = {}
     _cache_ttl = 300  # 5 minutes default TTL
     
-    def __init__(self, enable_diagnostics: bool = True, enable_audit: bool = True):
+    def __init__(self, enable_diagnostics: bool = True, enable_audit: bool = True, database_name: str = None):
         load_dotenv()
         self.conn_str = os.getenv('DB_CONN_STR')
         if not self.conn_str:
             raise ValueError("DB_CONN_STR not found in .env variables")
+        
+        # Multi-database support: replace database in connection string if specified
+        if database_name:
+            # Replace database name in connection string (supports both cdn_test and cdn_mietex)
+            import re
+            self.conn_str = re.sub(r'/cdn_\w+\?', f'/{database_name}?', self.conn_str)
+            self.database_name = database_name
+        else:
+            # Extract database name from connection string
+            import re
+            match = re.search(r'/([^/?]+)\?', self.conn_str)
+            self.database_name = match.group(1) if match else 'unknown'
+        
         self.engine = self._create_db_engine()
         self.diagnostics = QueryDiagnostics() if enable_diagnostics else None
         
@@ -73,12 +86,12 @@ class DatabaseConnector:
                 self._audit = SecurityAuditLog()
                 self._audit.log(
                     AuditEventType.SESSION_START,
-                    details={"component": "DatabaseConnector"}
+                    details={"component": "DatabaseConnector", "database": self.database_name}
                 )
             except ImportError:
                 logger.debug("Audit logging not available")
         
-        logger.info("DatabaseConnector initialized successfully")
+        logger.info(f"DatabaseConnector initialized for database: {self.database_name}")
 
     def _create_db_engine(self):
         """
@@ -114,36 +127,52 @@ class DatabaseConnector:
         """Returns a raw connection object"""
         return self.engine.connect()
 
+    def _get_cache_key(self, base_key: str) -> str:
+        """Creates database-specific cache key."""
+        return f"{self.database_name}_{base_key}"
+    
     def _get_from_cache(self, cache_key: str) -> Optional[pd.DataFrame]:
-        """Retrieves data from cache if valid."""
-        if cache_key in self._cache:
-            timestamp = self._cache_timestamps.get(cache_key, 0)
+        """Retrieves data from cache if valid. Uses database-specific key."""
+        full_key = self._get_cache_key(cache_key)
+        if full_key in self._cache:
+            timestamp = self._cache_timestamps.get(full_key, 0)
             if time.time() - timestamp < self._cache_ttl:
-                logger.debug(f"Cache HIT for: {cache_key}")
-                return self._cache[cache_key].copy()
+                logger.debug(f"Cache HIT for: {full_key}")
+                return self._cache[full_key].copy()
             else:
                 # Cache expired
-                del self._cache[cache_key]
-                del self._cache_timestamps[cache_key]
-                logger.debug(f"Cache EXPIRED for: {cache_key}")
+                del self._cache[full_key]
+                del self._cache_timestamps[full_key]
+                logger.debug(f"Cache EXPIRED for: {full_key}")
         return None
     
     def _set_cache(self, cache_key: str, data: pd.DataFrame):
-        """Stores data in cache."""
-        self._cache[cache_key] = data.copy()
-        self._cache_timestamps[cache_key] = time.time()
-        logger.debug(f"Cache SET for: {cache_key} ({len(data)} rows)")
+        """Stores data in cache with database-specific key."""
+        full_key = self._get_cache_key(cache_key)
+        self._cache[full_key] = data.copy()
+        self._cache_timestamps[full_key] = time.time()
+        logger.debug(f"Cache SET for: {full_key} ({len(data)} rows)")
     
     def clear_cache(self, cache_key: str = None):
-        """Clears cache - all or specific key."""
+        """Clears cache - all or specific key (with database prefix)."""
         if cache_key:
-            self._cache.pop(cache_key, None)
-            self._cache_timestamps.pop(cache_key, None)
-            logger.info(f"Cache cleared for: {cache_key}")
+            full_key = self._get_cache_key(cache_key)
+            self._cache.pop(full_key, None)
+            self._cache_timestamps.pop(full_key, None)
+            logger.info(f"Cache cleared for: {full_key}")
         else:
             self._cache.clear()
             self._cache_timestamps.clear()
             logger.info("All cache cleared")
+    
+    def clear_database_cache(self):
+        """Clears all cache entries for current database."""
+        prefix = f"{self.database_name}_"
+        keys_to_remove = [k for k in self._cache.keys() if k.startswith(prefix)]
+        for key in keys_to_remove:
+            self._cache.pop(key, None)
+            self._cache_timestamps.pop(key, None)
+        logger.info(f"Cleared {len(keys_to_remove)} cache entries for database: {self.database_name}")
 
     def execute_query(self, query: str, params=None, query_name: str = "unnamed") -> pd.DataFrame:
         """
@@ -242,16 +271,18 @@ class DatabaseConnector:
         return df
 
 
-    def get_current_stock(self, use_cache: bool = True) -> pd.DataFrame:
+    def get_warehouses(self, use_cache: bool = True, only_with_stock: bool = True) -> pd.DataFrame:
         """
-        Fetches current stock levels from TwrZasoby/Towary.
-        Only includes items that are defined as Raw Materials in production orders (CZE_Typ IN (1, 2)).
-        Excludes explicit Services (Twr_Typ = 2).
+        Fetches list of available warehouses with stock counts.
         
         Args:
             use_cache: If True, returns cached data if available (default: True)
+            only_with_stock: If True, returns only warehouses with stock > 0 (default: True)
+        
+        Returns:
+            DataFrame with columns: MagId, Symbol, Name, ProductCount, TotalStock
         """
-        cache_key = "current_stock"
+        cache_key = f"warehouses_{only_with_stock}"
         
         if use_cache:
             cached = self._get_from_cache(cache_key)
@@ -260,22 +291,87 @@ class DatabaseConnector:
         
         query = """
         SELECT 
-            t.Twr_TwrId as TowarId,
-            t.Twr_Kod as Code,
-            t.Twr_Nazwa as Name,
-            ISNULL(SUM(z.TwZ_Ilosc), 0) as StockLevel,
-            (SELECT COUNT(*) FROM dbo.CtiZlecenieElem e WHERE e.CZE_TwrId = t.Twr_TwrId AND e.CZE_Typ IN (1, 2)) as UsageCount
-        FROM CDN.Towary t
-        LEFT JOIN CDN.TwrZasoby z ON t.Twr_TwrId = z.TwZ_TwrId
-        WHERE t.Twr_TwrId IN (
-            SELECT DISTINCT CZE_TwrId 
-            FROM dbo.CtiZlecenieElem 
-            WHERE CZE_Typ IN (1, 2)
-        )
-        AND t.Twr_Typ != 2
-        GROUP BY t.Twr_TwrId, t.Twr_Kod, t.Twr_Nazwa
-        ORDER BY UsageCount DESC
+            m.Mag_MagId as MagId,
+            m.Mag_Symbol as Symbol,
+            m.Mag_Nazwa as Name,
+            COUNT(DISTINCT z.TwZ_TwrId) as ProductCount,
+            ISNULL(SUM(z.TwZ_Ilosc), 0) as TotalStock
+        FROM CDN.Magazyny m WITH (NOLOCK)
+        LEFT JOIN CDN.TwrZasoby z WITH (NOLOCK) ON m.Mag_MagId = z.TwZ_MagId
+        GROUP BY m.Mag_MagId, m.Mag_Symbol, m.Mag_Nazwa
         """
+        
+        if only_with_stock:
+            query += " HAVING SUM(z.TwZ_Ilosc) > 0"
+        
+        query += " ORDER BY m.Mag_Symbol"
+        
+        df = self.execute_query(query, query_name="get_warehouses")
+        
+        if not df.empty:
+            self._set_cache(cache_key, df)
+        
+        return df
+
+    def get_current_stock(self, use_cache: bool = True, warehouse_ids: list = None) -> pd.DataFrame:
+        """
+        Fetches current stock levels from TwrZasoby/Towary.
+        Only includes items that are defined as Raw Materials in production orders (CZE_Typ IN (1, 2)).
+        Excludes explicit Services (Twr_Typ = 2).
+        
+        Args:
+            use_cache: If True, returns cached data if available (default: True)
+            warehouse_ids: Optional list of warehouse IDs to filter by. If None, returns global stock.
+        """
+        # Create cache key based on warehouse filter
+        warehouse_key = "_".join(map(str, sorted(warehouse_ids))) if warehouse_ids else "all"
+        cache_key = f"current_stock_{warehouse_key}"
+        
+        if use_cache:
+            cached = self._get_from_cache(cache_key)
+            if cached is not None:
+                return cached
+        
+        # Build query with optional warehouse filter
+        if warehouse_ids:
+            warehouse_list = ",".join(map(str, warehouse_ids))
+            query = f"""
+            SELECT 
+                t.Twr_TwrId as TowarId,
+                t.Twr_Kod as Code,
+                t.Twr_Nazwa as Name,
+                ISNULL(SUM(z.TwZ_Ilosc), 0) as StockLevel,
+                (SELECT COUNT(*) FROM dbo.CtiZlecenieElem e WHERE e.CZE_TwrId = t.Twr_TwrId AND e.CZE_Typ IN (1, 2)) as UsageCount
+            FROM CDN.Towary t
+            LEFT JOIN CDN.TwrZasoby z ON t.Twr_TwrId = z.TwZ_TwrId AND z.TwZ_MagId IN ({warehouse_list})
+            WHERE t.Twr_TwrId IN (
+                SELECT DISTINCT CZE_TwrId 
+                FROM dbo.CtiZlecenieElem 
+                WHERE CZE_Typ IN (1, 2)
+            )
+            AND t.Twr_Typ != 2
+            GROUP BY t.Twr_TwrId, t.Twr_Kod, t.Twr_Nazwa
+            ORDER BY UsageCount DESC
+            """
+        else:
+            query = """
+            SELECT 
+                t.Twr_TwrId as TowarId,
+                t.Twr_Kod as Code,
+                t.Twr_Nazwa as Name,
+                ISNULL(SUM(z.TwZ_Ilosc), 0) as StockLevel,
+                (SELECT COUNT(*) FROM dbo.CtiZlecenieElem e WHERE e.CZE_TwrId = t.Twr_TwrId AND e.CZE_Typ IN (1, 2)) as UsageCount
+            FROM CDN.Towary t
+            LEFT JOIN CDN.TwrZasoby z ON t.Twr_TwrId = z.TwZ_TwrId
+            WHERE t.Twr_TwrId IN (
+                SELECT DISTINCT CZE_TwrId 
+                FROM dbo.CtiZlecenieElem 
+                WHERE CZE_Typ IN (1, 2)
+            )
+            AND t.Twr_Typ != 2
+            GROUP BY t.Twr_TwrId, t.Twr_Kod, t.Twr_Nazwa
+            ORDER BY UsageCount DESC
+            """
         df = self.execute_query(query, query_name="get_current_stock")
         
         if not df.empty:
@@ -369,7 +465,7 @@ class DatabaseConnector:
         
         return df
 
-    def get_bom_with_stock(self, final_product_id: int, technology_id: int = None) -> pd.DataFrame:
+    def get_bom_with_stock(self, final_product_id: int, technology_id: int = None, warehouse_ids: list = None) -> pd.DataFrame:
         """
         Fetches BOM for a product along with current stock levels of ingredients.
         Used for AI generation to advise on purchasing.
@@ -378,9 +474,16 @@ class DatabaseConnector:
         Args:
             final_product_id: ID of the final product
             technology_id: Optional specific technology ID. If None, uses all technologies for product.
+            warehouse_ids: Optional list of warehouse IDs to filter stock by. If None, uses all warehouses.
         """
-        # Build query with optional technology filter (parameterized to prevent SQL injection)
-        base_query = """
+        # Build warehouse filter for JOIN condition
+        warehouse_filter = ""
+        if warehouse_ids:
+            warehouse_list = ",".join(map(str, warehouse_ids))
+            warehouse_filter = f" AND z.TwZ_MagId IN ({warehouse_list})"
+        
+        # Build query with optional technology and warehouse filters
+        base_query = f"""
         SELECT 
             elem_t.Twr_Kod as IngredientCode,
             elem_t.Twr_Nazwa as IngredientName,
@@ -390,7 +493,7 @@ class DatabaseConnector:
         FROM dbo.CtiTechnolNag n WITH (NOLOCK)
         JOIN dbo.CtiTechnolElem e WITH (NOLOCK) ON n.CTN_ID = e.CTE_CTNId
         JOIN CDN.Towary elem_t WITH (NOLOCK) ON e.CTE_TwrId = elem_t.Twr_TwrId
-        LEFT JOIN CDN.TwrZasoby z WITH (NOLOCK) ON elem_t.Twr_TwrId = z.TwZ_TwrId
+        LEFT JOIN CDN.TwrZasoby z WITH (NOLOCK) ON elem_t.Twr_TwrId = z.TwZ_TwrId{warehouse_filter}
         WHERE n.CTN_TwrId = :final_product_id
           AND e.CTE_Typ IN (1, 2)
           AND elem_t.Twr_Typ != 2
@@ -409,6 +512,61 @@ class DatabaseConnector:
         
         return self.execute_query(base_query, params=params,
                                   query_name=f"get_bom_with_stock({final_product_id})")
+    
+    def get_bom_with_warehouse_breakdown(self, final_product_id: int, technology_id: int = None) -> pd.DataFrame:
+        """
+        Fetches BOM for a product with stock breakdown per warehouse.
+        Used by AI to provide recommendations considering stock in other warehouses.
+        
+        Args:
+            final_product_id: ID of the final product
+            technology_id: Optional specific technology ID
+            
+        Returns:
+            DataFrame with columns: IngredientCode, IngredientName, QuantityPerUnit, Unit,
+                                   MagSymbol, MagName, StockInWarehouse, TotalStock
+        """
+        tech_filter = ""
+        params = {"final_product_id": int(final_product_id)}  # Convert to Python int for ODBC compatibility
+        
+        if technology_id is not None:
+            tech_filter = " AND n.CTN_ID = :technology_id"
+            params["technology_id"] = int(technology_id)
+        
+        query = f"""
+        WITH BomItems AS (
+            SELECT DISTINCT
+                elem_t.Twr_TwrId as IngredientId,
+                elem_t.Twr_Kod as IngredientCode,
+                elem_t.Twr_Nazwa as IngredientName,
+                e.CTE_Ilosc as QuantityPerUnit,
+                elem_t.Twr_JM as Unit
+            FROM dbo.CtiTechnolNag n WITH (NOLOCK)
+            JOIN dbo.CtiTechnolElem e WITH (NOLOCK) ON n.CTN_ID = e.CTE_CTNId
+            JOIN CDN.Towary elem_t WITH (NOLOCK) ON e.CTE_TwrId = elem_t.Twr_TwrId
+            WHERE n.CTN_TwrId = :final_product_id
+              AND e.CTE_Typ IN (1, 2)
+              AND elem_t.Twr_Typ != 2
+              {tech_filter}
+        )
+        SELECT 
+            b.IngredientCode,
+            b.IngredientName,
+            b.QuantityPerUnit,
+            b.Unit,
+            m.Mag_Symbol as MagSymbol,
+            m.Mag_Nazwa as MagName,
+            ISNULL(z.TwZ_Ilosc, 0) as StockInWarehouse,
+            (SELECT ISNULL(SUM(z2.TwZ_Ilosc), 0) FROM CDN.TwrZasoby z2 WHERE z2.TwZ_TwrId = b.IngredientId) as TotalStock
+        FROM BomItems b
+        LEFT JOIN CDN.TwrZasoby z WITH (NOLOCK) ON b.IngredientId = z.TwZ_TwrId
+        LEFT JOIN CDN.Magazyny m WITH (NOLOCK) ON z.TwZ_MagId = m.Mag_MagId
+        WHERE z.TwZ_Ilosc > 0 OR z.TwZ_Ilosc IS NULL
+        ORDER BY b.IngredientCode, m.Mag_Symbol
+        """
+        
+        return self.execute_query(query, params=params,
+                                  query_name=f"get_bom_with_warehouse_breakdown({final_product_id})")
     
     def get_diagnostics_stats(self) -> dict:
         """Returns query performance statistics."""

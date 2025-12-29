@@ -20,7 +20,8 @@ def render_assistant_view(
     db,
     product_map: Dict[int, str],
     sorted_product_ids: list,
-    prepare_time_series
+    prepare_time_series,
+    warehouse_ids: list = None
 ):
     """
     Renders the AI Assistant view with Raw Material and Final Product analysis modes.
@@ -30,6 +31,7 @@ def render_assistant_view(
         product_map: Dict mapping TowarId -> DisplayName
         sorted_product_ids: List of product IDs sorted by usage
         prepare_time_series: Preprocessing function
+        warehouse_ids: Optional list of warehouse IDs to filter stock
     """
     st.subheader("🤖 Inteligentny Asystent Zakupowy")
     
@@ -150,7 +152,7 @@ def render_assistant_view(
     else:
         _render_final_product_analysis(
             db, ai_source, ollama_model, 
-            selected_models, comparison_mode
+            selected_models, comparison_mode, warehouse_ids
         )
 
 
@@ -260,9 +262,9 @@ def _render_raw_material_analysis(
 
 def _render_final_product_analysis(
     db, ai_source, ollama_model, 
-    selected_models=[], comparison_mode=False
+    selected_models=[], comparison_mode=False, warehouse_ids=None
 ):
-    """Renders final product (BOM) analysis."""
+    """Renders final product (BOM) analysis with warehouse filtering."""
     with st.spinner("Pobieranie listy wyrobów gotowych..."):
         df_tech_prods = db.get_products_with_technology()
     
@@ -285,31 +287,55 @@ def _render_final_product_analysis(
     
     if st.button("Generuj Analizę Zakupową (BOM)"):
         with st.spinner("Pobieranie BOM i generowanie porady..."):
-            df_bom_ai = db.get_bom_with_stock(selected_final_prod_ai)
+            # Get BOM with stock for selected warehouses
+            df_bom_ai = db.get_bom_with_stock(selected_final_prod_ai, warehouse_ids=warehouse_ids)
             
             if df_bom_ai.empty:
                 st.warning("Brak zdefiniowanej technologii dla tego wyrobu.")
                 return
+            
+            # Get warehouse breakdown for AI context (all warehouses)
+            df_warehouse_breakdown = db.get_bom_with_warehouse_breakdown(selected_final_prod_ai)
             
             # Calculate deficits
             df_bom_ai['RequiredTotal'] = df_bom_ai['QuantityPerUnit'] * plan_qty
             df_bom_ai['Deficit'] = df_bom_ai['RequiredTotal'] - df_bom_ai['CurrentStock']
             df_bom_ai['Status'] = df_bom_ai['Deficit'].apply(lambda x: 'BRAK' if x > 0 else 'OK')
             
-            # Prepare text summary for AI
+            # Prepare text summary for AI (selected warehouses)
             bom_summary = df_bom_ai[['IngredientName', 'RequiredTotal', 'CurrentStock', 'Status']].to_string(index=False)
+            
+            # Prepare warehouse breakdown for AI (other warehouses context)
+            warehouse_context = ""
+            if not df_warehouse_breakdown.empty and warehouse_ids:
+                # Group by ingredient and show stock per warehouse
+                warehouse_summary = df_warehouse_breakdown.groupby(
+                    ['IngredientCode', 'IngredientName', 'MagSymbol']
+                )['StockInWarehouse'].sum().reset_index()
+                
+                if not warehouse_summary.empty:
+                    warehouse_context = f"""
+            
+            UWAGA - Stany na INNYCH magazynach (możliwe do przesunięcia):
+            {warehouse_summary.to_string(index=False)}
+            """
+            
+            # Build enhanced prompt with warehouse context
+            selected_mag_info = f"(wybrane magazyny: {len(warehouse_ids)})" if warehouse_ids else "(wszystkie magazyny)"
             
             prompt = f"""
             Jesteś asystentem zakupowym w fabryce. Planujemy produkcję wyrobu: {tech_map[selected_final_prod_ai]}.
             Ilość do wyprodukowania: {plan_qty} szt.
             
-            Oto analiza zapotrzebowania na surowce (BOM vs Magazyn):
+            Oto analiza zapotrzebowania na surowce (BOM vs Magazyn) {selected_mag_info}:
             {bom_summary}
+            {warehouse_context}
             
             Zadanie:
             1. Wskaż krytyczne braki (co musimy pilnie zamówić?).
-            2. Czy są jakieś ryzyka dla ciągłości produkcji?
-            3. Podaj rekomendację dla działu zakupów.
+            2. Jeśli są surowce na innych magazynach - zasugeruj przesunięcie międzymagazynowe.
+            3. Czy są jakieś ryzyka dla ciągłości produkcji?
+            4. Podaj rekomendację dla działu zakupów.
             Odpowiedz krótko i konkretnie w języku polskim.
             """
             
