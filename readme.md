@@ -102,9 +102,10 @@ ai-supply-assistant/
 
 ## 📖 Dokumentacja
 
-- [Instrukcja Użytkownika](USER_GUIDE.md)
-- [Historia Zmian](CHANGELOG.md)
-- [Demo Notebook](notebooks/demo_walkthrough.ipynb)
+- **[Dokumentacja Techniczna](TECHNICAL_DOCUMENTATION.md)** - Kompletna dokumentacja architektury, modułów i API
+- [Instrukcja Użytkownika](USER_GUIDE.md) - Przewodnik dla użytkowników końcowych
+- [Historia Zmian](CHANGELOG.md) - Changelog projektu
+- [Demo Notebook](notebooks/demo_walkthrough.ipynb) - Interaktywne demo
 
 ---
 
