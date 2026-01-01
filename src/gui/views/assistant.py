@@ -147,7 +147,7 @@ def render_assistant_view(
         _render_raw_material_analysis(
             db, product_map, sorted_product_ids, 
             prepare_time_series, ai_source, ollama_model,
-            selected_models, comparison_mode
+            selected_models, comparison_mode, warehouse_ids
         )
     else:
         _render_final_product_analysis(
@@ -178,7 +178,7 @@ def _check_gemini_configured() -> bool:
 def _render_raw_material_analysis(
     db, product_map, sorted_product_ids, 
     prepare_time_series, ai_source, ollama_model,
-    selected_models=[], comparison_mode=False
+    selected_models=[], comparison_mode=False, warehouse_ids=None
 ):
     """Renders raw material anomaly analysis."""
     selected_product_ai = st.selectbox(
@@ -193,6 +193,16 @@ def _render_raw_material_analysis(
             df_hist = db.get_historical_data()
             df_clean = prepare_time_series(df_hist)
             df_prod = df_clean[df_clean['TowarId'] == selected_product_ai].copy()
+            
+            # Fetch current stock for context (with warehouse filter)
+            df_stock = db.get_current_stock(warehouse_ids=warehouse_ids)
+            current_stock = 0
+            if not df_stock.empty and 'TowarId' in df_stock.columns:
+                 # Ensure numeric type for matching
+                df_stock['TowarId'] = pd.to_numeric(df_stock['TowarId'], errors='coerce').fillna(0).astype(int)
+                stock_row = df_stock[df_stock['TowarId'] == selected_product_ai]
+                if not stock_row.empty:
+                    current_stock = stock_row.iloc[0]['StockLevel']
             
             if df_prod.empty:
                 st.warning(
@@ -218,13 +228,23 @@ def _render_raw_material_analysis(
             
             product_name = product_map.get(selected_product_ai, f"ID {selected_product_ai}")
             
+            # Context string for warehouses
+            mag_context = f"(wybrane magazyny: {len(warehouse_ids)})" if warehouse_ids else "(wszystkie magazyny)"
+            
             prompt = f"""
             Jesteś ekspertem ds. łańcucha dostaw. Przeanalizuj sytuację dla surowca: {product_name}.
-            Ostatnie 4 tygodnie zużycia: {last_4_weeks}.
-            Średnie zużycie: {avg_consumption:.2f}.
             
-            Czy trend jest rosnący czy malejący? Czy sugerujesz zwiększenie zapasów? 
-            Jakie mogą być przyczyny anomalii (jeśli występują)?
+            DANE:
+            - Obecny stan magazynowy {mag_context}: {current_stock:.2f}
+            - Ostatnie 4 tygodnie zużycia: {last_4_weeks}
+            - Średnie zużycie tygodniowe: {avg_consumption:.2f}
+            
+            PYTANIA:
+            1. Czy trend zużycia jest rosnący czy malejący?
+            2. Na ile tygodni wystarczy obecny zapas (Coverage)?
+            3. Czy sugerujesz zwiększenie zapasów?
+            4. Jakie mogą być przyczyny anomalii (jeśli występują)?
+            
             Odpowiedz krótko i konkretnie w języku polskim.
             """
             

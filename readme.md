@@ -12,10 +12,13 @@ System wspiera działy zakupów i produkcji w analizie zużycia surowców, progn
 ## ✨ Funkcjonalności
 
 | Moduł | Opis |
-|:------|:-----|
+|:------|:-----:|
 | **📊 Analiza Danych** | Wykresy trendów zużycia, Panel Zakupowca z BOM |
 | **📈 Predykcja** | Prognoza popytu (Random Forest, Gradient Boosting, Exp. Smoothing) |
-| **🤖 AI Assistant** | Analiza anomalii i rekomendacje zakupowe (Gemini / Ollama) |
+| **🤖 AI Assistant** | Analiza anomalii i rekomendacje zakupowe (Gemini / Ollama / Local LLM) |
+| **🏭 Filtrowanie Magazynów** | Analiza per magazyn z kontekstem w promptach AI |
+| **🔐 System Użytkowników** | Logowanie, role (Admin/Zakupowiec), kontrola dostępu |
+| **🔌 Kreator Połączenia** | Automatyczne wykrywanie SQL Server, łatwa konfiguracja |
 
 ---
 
@@ -36,39 +39,42 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 3. Konfiguracja
-
-Skopiuj plik `.env.example` do `.env` i uzupełnij dane:
-
-```bash
-copy .env.example .env
-```
-
-Edytuj `.env`:
-
-- `DB_CONN_STR` - connection string do MS SQL
-- `GEMINI_API_KEY` - klucz API Google Gemini (opcjonalnie)
-- `LOCAL_LLM_PATH` - ścieżka do modelu GGUF (opcjonalnie, dla lokalnego AI)
-
-**NOWE: Lokalny Model AI (Grudzień 2024)**
-
-```bash
-# Domyślny model: Qwen2.5-7B-Instruct (Zalecany - wyższa jakość)
-LOCAL_LLM_PATH=models/qwen2.5-7b-instruct-q3_k_m.gguf
-
-# Alternatywnie: Qwen2.5-3B-Instruct (szybszy, mniejsze wymagania)
-# LOCAL_LLM_PATH=models/qwen2.5-3b-instruct-q4_k_m.gguf
-```
-
-Oba modele skonfigurowane i gotowe do użycia! 🚀
-
-### 4. Uruchomienie
+### 3. Uruchomienie
 
 ```bash
 streamlit run main.py
 ```
 
 Aplikacja uruchomi się pod adresem: `http://localhost:8501`
+
+### 4. Pierwsze logowanie
+
+| Dane domyślne | Wartość |
+|---------------|---------|
+| Użytkownik | `admin` |
+| Hasło | `admin123` |
+
+> ⚠️ **Zmień hasło po pierwszym logowaniu!** (Panel Admina → Zmień hasło)
+
+---
+
+## 🔌 Kreator Połączenia (Pierwsze uruchomienie)
+
+Przy pierwszym uruchomieniu aplikacja automatycznie uruchomi **Kreator Połączenia**:
+
+1. **🖥️ Wykrywanie serwerów** - automatycznie znajduje lokalne instancje SQL Server
+2. **🔐 Uwierzytelnianie** - SQL Auth lub Windows Auth
+3. **🗄️ Wybór bazy** - lista dostępnych baz danych
+4. **✅ Test połączenia** - weryfikacja i zapis do `.env`
+
+---
+
+## 🔐 Role i Uprawnienia
+
+| Rola | Analiza | Predykcja | AI | Zmiana bazy | Panel Admina |
+|------|:-------:|:---------:|:--:|:-----------:|:------------:|
+| **Administrator** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Zakupowiec** | ✅ | ✅ | ✅ | ❌ | ❌ |
 
 ---
 
@@ -77,14 +83,22 @@ Aplikacja uruchomi się pod adresem: `http://localhost:8501`
 ```
 ai-supply-assistant/
 ├── main.py                 # Entry Point (Streamlit)
+├── config/
+│   └── users.json          # Użytkownicy (hasła bcrypt)
 ├── src/
 │   ├── db_connector.py     # Połączenie z MS SQL
+│   ├── sql_server_discovery.py  # Wykrywanie SQL Server
 │   ├── preprocessing.py    # Przetwarzanie danych
 │   ├── forecasting.py      # Modele ML
-│   └── ai_engine/          # Klienci AI (Gemini, Ollama)
+│   ├── ai_engine/          # Klienci AI (Gemini, Ollama, Local LLM)
+│   ├── security/
+│   │   ├── auth.py         # Uwierzytelnianie i autoryzacja
+│   │   └── audit.py        # Logowanie zdarzeń
+│   └── gui/
+│       ├── views/          # Widoki (analysis, prediction, assistant, login, admin)
+│       └── components/     # Komponenty (sidebar)
+├── models/                 # Modele GGUF dla Local LLM
 ├── notebooks/              # Jupyter Notebooks
-├── scripts/                # Skrypty testowe
-├── USER_GUIDE.md           # Instrukcja użytkownika
 ├── CHANGELOG.md            # Historia zmian
 └── requirements.txt        # Zależności Python
 ```
@@ -93,17 +107,19 @@ ai-supply-assistant/
 
 ## 🛡️ Bezpieczeństwo
 
-- ✅ Parametryzowane zapytania SQL (ochrona przed SQL Injection)
-- ✅ Anonimizacja danych (NIP, PESEL, email) przed wysyłką do chmury
-- ✅ Lokalny tryb AI (Ollama) dla pełnej prywatności
-- ✅ Zmienne środowiskowe dla wrażliwych danych
+- ✅ **Uwierzytelnianie** - logowanie użytkowników z hashowaniem bcrypt
+- ✅ **Autoryzacja** - role-based access control (RBAC)
+- ✅ **Parametryzowane zapytania SQL** - ochrona przed SQL Injection
+- ✅ **Anonimizacja danych** - NIP, PESEL, email przed wysyłką do chmury
+- ✅ **Lokalny tryb AI** - pełna prywatność danych
+- ✅ **Zmienne środowiskowe** - wrażliwe dane w `.env`
 
 ---
 
 ## 📖 Dokumentacja
 
-- **[Dokumentacja Techniczna](TECHNICAL_DOCUMENTATION.md)** - Kompletna dokumentacja architektury, modułów i API
 - [Instrukcja Użytkownika](USER_GUIDE.md) - Przewodnik dla użytkowników końcowych
+- [Dokumentacja Techniczna](TECHNICAL_DOCUMENTATION.md) - Architektura i API
 - [Historia Zmian](CHANGELOG.md) - Changelog projektu
 - [Demo Notebook](notebooks/demo_walkthrough.ipynb) - Interaktywne demo
 

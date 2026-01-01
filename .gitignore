@@ -1,6 +1,7 @@
 # Environment and Secrets
 .env
 *.env.local
+config/users.json
 
 # Python
 venv/
@@ -31,6 +32,7 @@ wheels/
 .idea/
 *.swp
 *.swo
+.gemini/
 
 # Logs and Debug
 *.log
@@ -64,3 +66,4 @@ notebooks/.ipynb_checkpoints/
 # OS
 .DS_Store
 Thumbs.db
+

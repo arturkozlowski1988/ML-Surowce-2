@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.4.0] - 2026-01-01
+
+### Added
+
+- **🔐 System Użytkowników i Uprawnień**:
+  - Ekran logowania z uwierzytelnianiem bcrypt
+  - Role: Administrator (pełny dostęp) i Zakupowiec (ograniczony)
+  - Panel Admina: zarządzanie użytkownikami (dodawanie, usuwanie, zmiana haseł)
+  - Zakupowiec nie może zmieniać bazy danych ani konfiguracji
+  - Hasła hashowane bcrypt (bezpieczne przechowywanie w `config/users.json`)
+  
+- **🔌 Kreator Połączenia z Bazą Danych**:
+  - Automatyczne wykrywanie lokalnych instancji SQL Server z rejestru Windows
+  - 4-krokowy kreator: Serwer → Logowanie → Baza → Potwierdzenie
+  - Obsługa SQL Auth i Windows Auth
+  - Automatyczny zapis konfiguracji do `.env`
+  - Przycisk "Uruchom Kreator Połączenia" w sidebar
+
+- **🏭 Ulepszone Prompty AI**:
+  - Analiza Surowca uwzględnia teraz stany magazynowe i wybrane magazyny
+  - Obliczanie "Coverage" (na ile tygodni wystarczy zapasu)
+  - Kontekst magazynów w promptach BOM
+
+### Changed
+
+- `main.py` v1.4.0 - dodano warstwę uwierzytelniania
+- `sidebar.py` - wyświetlanie użytkownika, przycisk wyloguj, ukrywanie opcji wg roli
+- Zaktualizowano dokumentację
+
+### Security
+
+- Hasła użytkowników hashowane algorytmem bcrypt
+- Zabezpieczenie przed usunięciem ostatniego administratora
+- Role-based access control (RBAC)
+
+---
+
 ## [1.2.0] - 2025-12-29
 
 ### Added

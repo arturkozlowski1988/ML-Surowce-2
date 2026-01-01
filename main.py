@@ -1,12 +1,15 @@
 """
 AI Supply Assistant - Main Application Entry Point
-Version: 1.2.0
+Version: 1.4.0
 
 This module serves as a thin wrapper that initializes the Streamlit app
 and delegates to modular GUI components.
 
 SECURITY: All credentials must be loaded from .env file.
 No hardcoded defaults for sensitive data.
+
+NEW in 1.3.0: First-run connection wizard for easy setup.
+NEW in 1.4.0: User authentication and role-based access control.
 """
 
 import streamlit as st
@@ -19,6 +22,10 @@ from src.gui.components.sidebar import render_sidebar
 from src.gui.views.analysis import render_analysis_view
 from src.gui.views.prediction import render_prediction_view
 from src.gui.views.assistant import render_assistant_view
+from src.gui.views.connection_wizard import render_connection_wizard
+from src.gui.views.login_view import render_login_view, get_current_user
+from src.gui.views.admin_view import render_admin_view
+from src.sql_server_discovery import is_configured
 from src.forecasting import Forecaster
 
 
@@ -29,12 +36,17 @@ st.set_page_config(
     layout="wide"
 )
 
-# Title
-st.title("🏭 AI Supply Assistant (Produkcja by CTI)")
 
-
-def get_db_connection(database_name: str = None):
-    """Creates database connection with optional database name."""
+def get_db_connection(database_name: str = None, use_demo: bool = False):
+    """Creates database connection with optional database name or demo mode."""
+    if use_demo:
+        # Use demo connector for test data
+        from src.demo_connector import DemoDataConnector
+        cache_key = "db_connection_demo"
+        if cache_key not in st.session_state:
+            st.session_state[cache_key] = DemoDataConnector()
+        return st.session_state[cache_key]
+    
     cache_key = f"db_connection_{database_name or 'default'}"
     
     if cache_key not in st.session_state:
@@ -45,24 +57,67 @@ def get_db_connection(database_name: str = None):
 
 def main():
     """Main application logic."""
+    
+    # STEP 1: Check authentication
+    if not render_login_view():
+        return  # Not logged in, login form is displayed
+    
+    # Get current user info
+    user = get_current_user()
+    
+    # STEP 2: Check if this is first run or wizard was requested (Admin only)
+    force_wizard = st.session_state.get('force_wizard', False)
+    
+    if not is_configured():
+        if user and user.get('can_access_wizard'):
+            render_connection_wizard(on_complete=st.rerun)
+        else:
+            st.error("🚫 Baza danych nie jest skonfigurowana. Skontaktuj się z administratorem.")
+        return
+    
+    if force_wizard and user and user.get('can_access_wizard'):
+        st.session_state.force_wizard = False
+        render_connection_wizard(on_complete=st.rerun)
+        return
+    
+    # Normal app flow - show title
+    st.title("🏭 AI Supply Assistant (Produkcja by CTI)")
+    
     try:
         # Render Sidebar (handles connection and mode selection)
+        # Pass user permissions to sidebar
         sidebar_state = render_sidebar(
             db_connector=DatabaseConnector,
-            rerun_callback=st.rerun
+            rerun_callback=st.rerun,
+            user_permissions={
+                'can_change_database': user.get('can_change_database', False) if user else False,
+                'can_access_wizard': user.get('can_access_wizard', False) if user else False,
+                'can_manage_users': user.get('can_manage_users', False) if user else False,
+            }
         )
         
-        # Get DB Connection with selected database
+        # Get DB Connection with selected database or demo mode
+        demo_mode = st.session_state.get('demo_mode', False)
         database_name = sidebar_state.get('database_name', 'cdn_test')
         selected_warehouses = sidebar_state.get('selected_warehouses', [])
         
-        db = get_db_connection(database_name)
+        db = get_db_connection(database_name, use_demo=demo_mode)
         
         # Show active database and warehouse info
-        if selected_warehouses:
+        if demo_mode:
+            st.info("🎓 **Tryb Demo** - dane testowe (zanonimizowane)")
+        elif selected_warehouses:
             st.info(f"🗄️ Baza: **{database_name}** | 🏭 Magazyny: {len(selected_warehouses)} wybranych")
         else:
             st.info(f"🗄️ Baza: **{database_name}** | 🏭 Wszystkie magazyny")
+        
+        # Route to appropriate view based on mode
+        app_mode = sidebar_state['app_mode']
+        
+        # Handle Admin Panel separately
+        if app_mode == "Panel Admina":
+            render_admin_view()
+            return
         
         # Global Data Fetch (with warehouse filtering)
         with st.spinner("Pobieranie danych globalnych..."):
@@ -79,8 +134,6 @@ def main():
                 product_map = dict(zip(df_stock['TowarId'], df_stock['DisplayName']))
                 sorted_product_ids = df_stock['TowarId'].tolist()
         
-        # Route to appropriate view based on mode
-        app_mode = sidebar_state['app_mode']
         start_date = sidebar_state['start_date']
         end_date = sidebar_state['end_date']
         
@@ -124,3 +177,4 @@ def main():
 # Run the app
 if __name__ == "__main__":
     main()
+

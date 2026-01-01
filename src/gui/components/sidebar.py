@@ -68,6 +68,12 @@ def render_connection_settings(on_connect: Optional[Callable] = None):
             except Exception as e:
                 st.error(f"Błąd: {e}")
                 return False
+        
+        # Reconfigure button
+        st.divider()
+        if st.button("🔧 Uruchom Kreator Połączenia", help="Otwórz kreator konfiguracji połączenia"):
+            st.session_state.force_wizard = True
+            st.rerun()
     
     return None
 
@@ -80,11 +86,17 @@ def render_connection_status(is_connected: bool):
         st.error("🔴 Błąd połączenia z bazą")
 
 
-def render_mode_selector() -> str:
-    """Renders the application mode selector."""
+def render_mode_selector(user_permissions: dict = None) -> str:
+    """Renders the application mode selector based on user permissions."""
+    modes = ["Analiza Danych", "Predykcja", "AI Assistant (GenAI)"]
+    
+    # Add Admin Panel for users with user management permission
+    if user_permissions and user_permissions.get('can_manage_users'):
+        modes.append("Panel Admina")
+    
     return st.selectbox(
         "Wybierz tryb:", 
-        ["Analiza Danych", "Predykcja", "AI Assistant (GenAI)"]
+        modes
     )
 
 
@@ -106,64 +118,114 @@ def render_date_filters() -> tuple:
     return start_date, end_date
 
 
-def render_sidebar(db_connector, rerun_callback: Callable) -> dict:
+def render_sidebar(db_connector, rerun_callback: Callable, user_permissions: dict = None) -> dict:
     """
     Main sidebar rendering function.
     
     Args:
         db_connector: Database connector class (not instance)
         rerun_callback: Function to call for page rerun (st.rerun)
+        user_permissions: Dict with user permission flags
     
     Returns:
         dict with keys: app_mode, start_date, end_date, db_status, database_name, selected_warehouses
     """
     with st.sidebar:
+        # User info and logout
+        from src.gui.views.login_view import get_current_user, logout
+        user = get_current_user()
+        
+        if user:
+            st.markdown(f"👤 **{user.get('display_name', user.get('username', 'Użytkownik'))}**")
+            role_display = "🔑 Admin" if user.get('role') == 'admin' else "📊 Zakupowiec"
+            st.caption(role_display)
+            
+            if st.button("🚪 Wyloguj", use_container_width=True):
+                logout()
+                rerun_callback()
+            
+            st.divider()
+        
         st.markdown("### 📦 Konfiguracja")
         
-        # Database Selector (NEW)
-        st.markdown("**🗄️ Baza Danych**")
-        available_databases = ["cdn_test", "cdn_mietex"]
+        # Demo Mode Toggle
+        from src.demo_connector import check_demo_data_available
+        demo_available, demo_status = check_demo_data_available()
         
-        if "selected_database" not in st.session_state:
-            st.session_state["selected_database"] = "cdn_test"
+        if demo_available:
+            demo_mode = st.checkbox(
+                "🎓 Tryb Demo (dane testowe)",
+                value=st.session_state.get("demo_mode", False),
+                help="Użyj zanonimizowanych danych testowych zamiast bazy danych"
+            )
+            
+            if demo_mode != st.session_state.get("demo_mode", False):
+                st.session_state["demo_mode"] = demo_mode
+                st.session_state["db_status"] = False
+                st.session_state.pop("selected_warehouses", None)
+                keys_to_remove = [k for k in st.session_state.keys() if k.startswith("db_connection_")]
+                for key in keys_to_remove:
+                    st.session_state.pop(key, None)
+                rerun_callback()
+            
+            if demo_mode:
+                st.info("🎓 **Tryb Demo** - dane zanonimizowane")
+        else:
+            demo_mode = False
         
-        selected_db = st.selectbox(
-            "Wybierz bazę:",
-            available_databases,
-            index=available_databases.index(st.session_state["selected_database"]),
-            key="database_selector"
-        )
+        # Database Selector - only for Admins (hidden in demo mode)
+        can_change_db = user_permissions.get('can_change_database', False) if user_permissions else False
         
-        # Track database change for rerun
-        if selected_db != st.session_state["selected_database"]:
-            st.session_state["selected_database"] = selected_db
-            st.session_state["db_status"] = False  # Reset connection
-            st.session_state.pop("selected_warehouses", None)  # Clear warehouse selection
-            st.session_state.pop("analysis_viewmodel", None)  # Clear cached viewmodel
-            # Clear DB connection cache for all databases
-            keys_to_remove = [k for k in st.session_state.keys() if k.startswith("db_connection_")]
-            for key in keys_to_remove:
-                st.session_state.pop(key, None)
-            rerun_callback()
+        if not demo_mode:
+            st.markdown("**🗄️ Baza Danych**")
+            available_databases = ["cdn_test", "cdn_mietex"]
+            
+            if "selected_database" not in st.session_state:
+                st.session_state["selected_database"] = "cdn_test"
+            
+            if can_change_db:
+                selected_db = st.selectbox(
+                    "Wybierz bazę:",
+                    available_databases,
+                    index=available_databases.index(st.session_state["selected_database"]),
+                    key="database_selector"
+                )
+                
+                # Track database change for rerun
+                if selected_db != st.session_state["selected_database"]:
+                    st.session_state["selected_database"] = selected_db
+                    st.session_state["db_status"] = False  # Reset connection
+                    st.session_state.pop("selected_warehouses", None)  # Clear warehouse selection
+                    st.session_state.pop("analysis_viewmodel", None)  # Clear cached viewmodel
+                    # Clear DB connection cache for all databases
+                    keys_to_remove = [k for k in st.session_state.keys() if k.startswith("db_connection_")]
+                    for key in keys_to_remove:
+                        st.session_state.pop(key, None)
+                    rerun_callback()
+            else:
+                # Show current database (read-only)
+                st.info(f"📁 {st.session_state['selected_database']}")
+                st.caption("🔒 Zmiana bazy wymaga uprawnień administratora")
         
         # Connection Status
         if "db_status" not in st.session_state:
             st.session_state["db_status"] = False
         
-        # Connection Settings
-        def handle_connect():
-            try:
-                db_conn = db_connector(database_name=st.session_state["selected_database"])
-                if db_conn.test_connection():
-                    st.session_state["db_status"] = True
-                    st.success("Połączono!")
-                    rerun_callback()
-                else:
-                    st.error("Nieudane połączenie.")
-            except Exception as e:
-                st.error(f"Błąd: {e}")
-        
-        render_connection_settings(on_connect=handle_connect)
+        # Connection Settings (only for Admins)
+        if can_change_db:
+            def handle_connect():
+                try:
+                    db_conn = db_connector(database_name=st.session_state["selected_database"])
+                    if db_conn.test_connection():
+                        st.session_state["db_status"] = True
+                        st.success("Połączono!")
+                        rerun_callback()
+                    else:
+                        st.error("Nieudane połączenie.")
+                except Exception as e:
+                    st.error(f"Błąd: {e}")
+            
+            render_connection_settings(on_connect=handle_connect)
         
         # Auto-connect if not connected
         if not st.session_state["db_status"]:
@@ -176,7 +238,7 @@ def render_sidebar(db_connector, rerun_callback: Callable) -> dict:
         
         render_connection_status(st.session_state["db_status"])
         
-        # Warehouse Selector (NEW)
+        # Warehouse Selector
         st.divider()
         st.markdown("**🏭 Magazyny**")
         
@@ -217,13 +279,13 @@ def render_sidebar(db_connector, rerun_callback: Callable) -> dict:
             st.info("Połącz się z bazą, aby wybrać magazyny")
         
         st.divider()
-        app_mode = render_mode_selector()
+        app_mode = render_mode_selector(user_permissions)
         
         # Date Filters
         start_date, end_date = render_date_filters()
         
         st.markdown("---")
-        st.caption(f"v1.2.0 | {st.session_state['selected_database']}")
+        st.caption(f"v1.4.0 | {st.session_state['selected_database']}")
         
         return {
             'app_mode': app_mode,
@@ -233,3 +295,4 @@ def render_sidebar(db_connector, rerun_callback: Callable) -> dict:
             'database_name': st.session_state["selected_database"],
             'selected_warehouses': st.session_state.get("selected_warehouses", [])
         }
+
