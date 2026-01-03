@@ -88,7 +88,7 @@ def render_connection_status(is_connected: bool):
 
 def render_mode_selector(user_permissions: dict = None) -> str:
     """Renders the application mode selector based on user permissions."""
-    modes = ["Analiza Danych", "Predykcja", "AI Assistant (GenAI)"]
+    modes = ["Analiza Danych", "Predykcja", "MRP Lite", "AI Assistant (GenAI)"]
     
     # Add Admin Panel for users with user management permission
     if user_permissions and user_permissions.get('can_manage_users'):

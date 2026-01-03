@@ -25,6 +25,7 @@ from src.gui.views.assistant import render_assistant_view
 from src.gui.views.connection_wizard import render_connection_wizard
 from src.gui.views.login_view import render_login_view, get_current_user
 from src.gui.views.admin_view import render_admin_view
+from src.gui.views.mrp_view import render_mrp_view
 from src.sql_server_discovery import is_configured
 from src.forecasting import Forecaster
 
@@ -38,16 +39,40 @@ st.set_page_config(
 
 
 def get_db_connection(database_name: str = None, use_demo: bool = False):
-    """Creates database connection with optional database name or demo mode."""
+    """Creates database connection with optional database name or demo mode.
+    
+    OPTIMIZATION: Disposes old connections when switching databases to free resources.
+    """
     if use_demo:
         # Use demo connector for test data
         from src.demo_connector import DemoDataConnector
         cache_key = "db_connection_demo"
+        
+        # Dispose non-demo connection if switching to demo mode
+        old_key = st.session_state.get('_current_db_cache_key')
+        if old_key and old_key != cache_key and old_key in st.session_state:
+            try:
+                st.session_state[old_key].dispose()
+            except Exception:
+                pass  # Ignore errors during dispose
+        
+        st.session_state['_current_db_cache_key'] = cache_key
+        
         if cache_key not in st.session_state:
             st.session_state[cache_key] = DemoDataConnector()
         return st.session_state[cache_key]
     
     cache_key = f"db_connection_{database_name or 'default'}"
+    
+    # Dispose old connection if switching databases
+    old_key = st.session_state.get('_current_db_cache_key')
+    if old_key and old_key != cache_key and old_key in st.session_state:
+        try:
+            st.session_state[old_key].dispose()
+        except Exception:
+            pass  # Ignore errors during dispose
+    
+    st.session_state['_current_db_cache_key'] = cache_key
     
     if cache_key not in st.session_state:
         st.session_state[cache_key] = DatabaseConnector(database_name=database_name)
@@ -159,6 +184,14 @@ def main():
                 prepare_time_series=prepare_time_series,
                 fill_missing_weeks=fill_missing_weeks,
                 Forecaster=Forecaster
+            )
+            
+        elif app_mode == "MRP Lite":
+            render_mrp_view(
+                db=db,
+                product_map=product_map,
+                sorted_product_ids=sorted_product_ids,
+                warehouse_ids=warehouse_ids
             )
             
         elif app_mode == "AI Assistant (GenAI)":

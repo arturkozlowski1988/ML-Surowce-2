@@ -3,14 +3,34 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from joblib import Parallel, delayed
 import warnings
+import logging
 
+# Optional: Polish holidays fallback if database not available
+try:
+    import holidays
+    PL_HOLIDAYS_FALLBACK = holidays.Poland()
+except ImportError:
+    PL_HOLIDAYS_FALLBACK = None
+    
 # Suppress warnings for cleaner logs
 warnings.filterwarnings("ignore")
 
+logger = logging.getLogger('Forecaster')
+
 class Forecaster:
-    def __init__(self):
+    def __init__(self, cti_holidays_set: set = None):
+        """
+        Initialize Forecaster with optional CTI holidays.
+        
+        Args:
+            cti_holidays_set: Set of datetime.date objects from CtiHolidays table.
+                             If None, falls back to holidays library.
+                             Get via: db.get_cti_holidays_set()
+        """
         self.models = {}
+        self._cti_holidays = cti_holidays_set  # Company holidays from database
 
     def predict_baseline(self, df: pd.DataFrame, weeks_ahead: int = 4) -> pd.DataFrame:
         """
@@ -45,10 +65,25 @@ class Forecaster:
     def _prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Shared feature engineering for ML models.
+        Uses company holidays from CtiHolidays (preferred) or holidays library (fallback).
         """
         df = df.copy()
         df['WeekOfYear'] = df['Date'].dt.isocalendar().week
         df['Month'] = df['Date'].dt.month
+        
+        # Holiday detection: Priority 1 = CtiHolidays from database, Priority 2 = holidays library
+        if self._cti_holidays is not None and len(self._cti_holidays) > 0:
+            # Use company-specific holidays from database (more accurate, includes Easter)
+            df['IsHoliday'] = df['Date'].apply(
+                lambda x: 1 if x.date() in self._cti_holidays else 0
+            )
+        elif PL_HOLIDAYS_FALLBACK is not None:
+            # Fallback to holidays library
+            df['IsHoliday'] = df['Date'].apply(
+                lambda x: 1 if x in PL_HOLIDAYS_FALLBACK else 0
+            )
+        else:
+            df['IsHoliday'] = 0
         
         # Lags and Rolling
         df['Lag_1'] = df.groupby('TowarId')['Quantity'].shift(1)
@@ -73,7 +108,7 @@ class Forecaster:
         if prod_feat_df.empty:
             return []
 
-        features = ['WeekOfYear', 'Month', 'Lag_1', 'Lag_2', 'Lag_3', 'Rolling_Mean_4']
+        features = ['WeekOfYear', 'Month', 'IsHoliday', 'Lag_1', 'Lag_2', 'Lag_3', 'Rolling_Mean_4']
         target = 'Quantity'
 
         X = prod_feat_df[features]
@@ -108,10 +143,19 @@ class Forecaster:
             # Approximate rolling mean for future steps (using known history + preds)
             rolling_mean = np.mean([current_lags[0]] + current_lags[:3]) # Simplification
             
+            # Check if future date is a holiday (CtiHolidays first, then fallback)
+            if self._cti_holidays is not None and len(self._cti_holidays) > 0:
+                is_holiday = 1 if future_date.date() in self._cti_holidays else 0
+            elif PL_HOLIDAYS_FALLBACK is not None:
+                is_holiday = 1 if future_date in PL_HOLIDAYS_FALLBACK else 0
+            else:
+                is_holiday = 0
+            
             # Build Row
             feat_dict = {
                 'WeekOfYear': [week_of_year],
                 'Month': [month],
+                'IsHoliday': [is_holiday],
                 'Lag_1': [current_lags[0]],
                 'Lag_2': [current_lags[1]],
                 'Lag_3': [current_lags[2]],
@@ -175,17 +219,44 @@ class Forecaster:
         """
         Universal entry point for forecasting.
         model_type: 'rf' (RandomForest), 'gb' (GradientBoosting), 'es' (ExponentialSmoothing)
-        """
-        predictions = []
-        product_ids = df['TowarId'].unique()
         
-        for pid in product_ids:
-            if model_type == 'es':
-                preds = self._train_predict_exponential_smoothing(df, pid, weeks_ahead)
-            else:
-                 # ML Types: rf, gb
-                preds = self._train_predict_single_ml(df, pid, model_type, weeks_ahead)
-                
-            predictions.extend(preds)
-            
+        PERFORMANCE: Uses parallel processing via joblib for multi-core execution.
+        Target: < 10s for 100 SKU (previously > 30s with sequential loop)
+        """
+        product_ids = df['TowarId'].unique()
+        n_products = len(product_ids)
+        
+        logger.info(f"Starting parallel forecasting for {n_products} products using model '{model_type}'")
+        
+        # Define processing function for parallel execution
+        def process_product(pid):
+            try:
+                if model_type == 'es':
+                    return self._train_predict_exponential_smoothing(df, pid, weeks_ahead)
+                else:
+                    return self._train_predict_single_ml(df, pid, model_type, weeks_ahead)
+            except Exception as e:
+                logger.warning(f"Error forecasting product {pid}: {e}")
+                return []
+        
+        # Use parallel processing with threads (prefer="threads" for I/O bound, 
+        # n_jobs=-1 uses all available cores)
+        # For small datasets (< 5 products), sequential is faster due to overhead
+        if n_products < 5:
+            # Sequential for small datasets
+            results = [process_product(pid) for pid in product_ids]
+        else:
+            # Parallel execution for larger datasets
+            results = Parallel(n_jobs=-1, prefer="threads", verbose=0)(
+                delayed(process_product)(pid) for pid in product_ids
+            )
+        
+        # Flatten results
+        predictions = []
+        for result in results:
+            predictions.extend(result)
+        
+        logger.info(f"Forecasting complete: {len(predictions)} predictions generated")
+        
         return pd.DataFrame(predictions)
+

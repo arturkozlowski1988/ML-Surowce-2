@@ -2,18 +2,34 @@ import os
 import urllib
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 import pandas as pd
 from functools import lru_cache
 from typing import Optional, Tuple
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
-# Configure logging for diagnostics
+# Ensure logs directory exists
+LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# Configure logging for diagnostics with both console and file handlers
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('DatabaseConnector')
+
+# Add RotatingFileHandler for persistent logging (5MB max per file, 5 backup files)
+file_handler = RotatingFileHandler(
+    os.path.join(LOG_DIR, 'db_connector.log'),
+    maxBytes=5*1024*1024,  # 5MB
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+file_handler.setLevel(logging.DEBUG)
+logger.addHandler(file_handler)
 
 
 class QueryDiagnostics:
@@ -126,6 +142,16 @@ class DatabaseConnector:
     def get_connection(self):
         """Returns a raw connection object"""
         return self.engine.connect()
+    
+    def dispose(self):
+        """
+        Releases all database connections and disposes the engine.
+        Call this when switching databases to free up resources.
+        """
+        if self.engine:
+            self.engine.dispose()
+            self.clear_database_cache()  # Also clear this database's cache
+            logger.info(f"Engine disposed for database: {self.database_name}")
 
     def _get_cache_key(self, base_key: str) -> str:
         """Creates database-specific cache key."""
@@ -641,3 +667,575 @@ class DatabaseConnector:
                 result['create_sql'].append(idx['sql'])
         
         return result
+    
+    def get_vendor_delivery_stats(self, vendor_id: int = None, use_cache: bool = True) -> pd.DataFrame:
+        """
+        Analyzes vendor delivery performance based on CDN.TraNag (document headers).
+        Calculates average delivery delays for supplier evaluation.
+        
+        Args:
+            vendor_id: Optional specific vendor ID to analyze. If None, returns all vendors.
+            use_cache: If True, returns cached data if available (default: True)
+            
+        Returns:
+            DataFrame with columns:
+            - VendorId, VendorCode, VendorName
+            - DeliveryCount: Number of deliveries
+            - AvgDelayDays: Average delay in days (positive = late, negative = early)
+            - OnTimePercent: Percentage of on-time deliveries
+            - Rating: A/B/C/D based on performance
+        """
+        cache_key = f"vendor_stats_{vendor_id or 'all'}"
+        
+        if use_cache:
+            cached = self._get_from_cache(cache_key)
+            if cached is not None:
+                return cached
+        
+        # Query for delivery performance
+        # TrN_TypDokumentu = 301 is PZ (Przyjęcie Zewnętrzne / External Receipt)
+        # TrN_DataOtrz = Receipt date, TrN_DataDoc = Document date (expected)
+        vendor_filter = ""
+        params = {}
+        if vendor_id is not None:
+            vendor_filter = "AND t.TrN_KnTId = :vendor_id"
+            params["vendor_id"] = vendor_id
+        
+        query = f"""
+        SELECT 
+            k.Knt_KntId as VendorId,
+            k.Knt_Kod as VendorCode,
+            k.Knt_Nazwa1 as VendorName,
+            COUNT(*) as DeliveryCount,
+            AVG(DATEDIFF(day, t.TrN_DataDoc, t.TrN_DataOtrz)) as AvgDelayDays,
+            SUM(CASE WHEN DATEDIFF(day, t.TrN_DataDoc, t.TrN_DataOtrz) <= 0 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as OnTimePercent
+        FROM CDN.TraNag t WITH (NOLOCK)
+        JOIN CDN.Kontrahenci k WITH (NOLOCK) ON t.TrN_KnTId = k.Knt_KntId
+        WHERE t.TrN_TypDokumentu = 301  -- PZ (przyjęcie zewnętrzne)
+          AND t.TrN_DataOtrz IS NOT NULL
+          AND t.TrN_DataDoc IS NOT NULL
+          {vendor_filter}
+        GROUP BY k.Knt_KntId, k.Knt_Kod, k.Knt_Nazwa1
+        HAVING COUNT(*) >= 3  -- Minimum 3 deliveries for meaningful stats
+        ORDER BY AvgDelayDays ASC
+        """
+        
+        df = self.execute_query(query, params=params if params else None, 
+                               query_name="get_vendor_delivery_stats")
+        
+        if not df.empty:
+            # Add rating based on performance
+            def calculate_rating(row):
+                if row['AvgDelayDays'] <= 0 and row['OnTimePercent'] >= 90:
+                    return 'A'
+                elif row['AvgDelayDays'] <= 3 and row['OnTimePercent'] >= 70:
+                    return 'B'
+                elif row['AvgDelayDays'] <= 7 and row['OnTimePercent'] >= 50:
+                    return 'C'
+                else:
+                    return 'D'
+            
+            df['Rating'] = df.apply(calculate_rating, axis=1)
+            df['AvgDelayDays'] = df['AvgDelayDays'].round(1)
+            df['OnTimePercent'] = df['OnTimePercent'].round(1)
+            
+            self._set_cache(cache_key, df)
+        
+        return df
+    
+    def get_product_delivery_info(self, product_id: int = None, use_cache: bool = True) -> pd.DataFrame:
+        """
+        Fetches delivery information from CtiDelivery table.
+        Includes vendor info, delivery times, costs, and order limits.
+        
+        Args:
+            product_id: Optional specific product ID. If None, returns all.
+            use_cache: If True, returns cached data if available
+            
+        Returns:
+            DataFrame with columns:
+            - ProductId, ProductCode, ProductName
+            - VendorId, VendorCode, VendorName
+            - IsDefaultVendor
+            - DeliveryTime_Min/Optimum/Max (in days)
+            - DeliveryCost_Min/Optimum/Max
+            - ProductionTime_Min/Optimum/Max
+            - MinOrderQty, MaxOrderQty
+            - Currency
+        """
+        cache_key = f"delivery_info_{product_id or 'all'}"
+        
+        if use_cache:
+            cached = self._get_from_cache(cache_key)
+            if cached is not None:
+                return cached
+        
+        product_filter = ""
+        params = {}
+        if product_id is not None:
+            product_filter = "AND cd.CD_TwrId = :product_id"
+            params["product_id"] = product_id
+        
+        query = f"""
+        SELECT 
+            cd.CD_TwrId AS ProductId,
+            t.Twr_Kod AS ProductCode,
+            t.Twr_Nazwa AS ProductName,
+            cd.CD_KntId AS VendorId,
+            k.Knt_Kod AS VendorCode,
+            k.Knt_Nazwa1 AS VendorName,
+            cd.CD_DefaultProvider AS IsDefaultVendor,
+            cd.CD_MinDeliveryTime AS DeliveryTime_Min,
+            cd.CD_OptimumDeliveryTime AS DeliveryTime_Optimum,
+            cd.CD_MaxDeliveryTime AS DeliveryTime_Max,
+            cd.CD_MinDeliveryCost AS DeliveryCost_Min,
+            cd.CD_OptimumDeliveryCost AS DeliveryCost_Optimum,
+            cd.CD_MaxDeliveryCost AS DeliveryCost_Max,
+            cd.CD_MinProductionTime AS ProductionTime_Min,
+            cd.CD_OptimumProductionTime AS ProductionTime_Optimum,
+            cd.CD_MaxProductionTime AS ProductionTime_Max,
+            cd.CD_MinAmount AS MinOrderQty,
+            cd.CD_MaxAmount AS MaxOrderQty,
+            cd.CD_Currency AS Currency,
+            cd.CD_Price AS UnitPrice
+        FROM dbo.CtiDelivery cd
+        LEFT JOIN CDN.Towary t ON cd.CD_TwrId = t.Twr_TwrId
+        LEFT JOIN CDN.Kontrahenci k ON cd.CD_KntId = k.Knt_KntId
+        WHERE 1=1 {product_filter}
+        ORDER BY cd.CD_DefaultProvider DESC, t.Twr_Kod
+        """
+        
+        df = self.execute_query(query, params=params if params else None,
+                               query_name="get_product_delivery_info")
+        
+        if not df.empty:
+            self._set_cache(cache_key, df)
+        
+        return df
+    
+    def get_product_lead_times(self, product_id: int = None, use_cache: bool = True) -> pd.DataFrame:
+        """
+        Fetches product lead times from CtiTwrCzasy table.
+        Contains delivery and production times at product level (not vendor-specific).
+        
+        Args:
+            product_id: Optional specific product ID. If None, returns all.
+            use_cache: If True, returns cached data
+            
+        Returns:
+            DataFrame with columns:
+            - ProductId, ProductCode, ProductName
+            - LeadTime_Min/Optimum/Max (delivery, in days)
+            - LeadTime_Type (1=hours, 2=days, 3=weeks)
+            - LeadCost_Min/Optimum/Max
+            - ProdTime_Min/Optimum/Max (production)
+            - ProdCost_Min/Optimum/Max
+        """
+        cache_key = f"lead_times_{product_id or 'all'}"
+        
+        if use_cache:
+            cached = self._get_from_cache(cache_key)
+            if cached is not None:
+                return cached
+        
+        product_filter = ""
+        params = {}
+        if product_id is not None:
+            product_filter = "AND crc.CRC_TwrId = :product_id"
+            params["product_id"] = product_id
+        
+        query = f"""
+        SELECT 
+            crc.CRC_TwrId AS ProductId,
+            t.Twr_Kod AS ProductCode,
+            t.Twr_Nazwa AS ProductName,
+            -- Delivery times
+            crc.CRC_CzasMinMin AS LeadTime_Min,
+            crc.CRC_CzasOPTIMin AS LeadTime_Optimum,
+            crc.CRC_CzasMAXMin AS LeadTime_Max,
+            crc.CRC_CzasMinTyp AS LeadTime_Type,  -- 1=hours, 2=days, 3=weeks
+            crc.CRC_KosztMin AS LeadCost_Min,
+            crc.CRC_KosztOPTI AS LeadCost_Optimum,
+            crc.CRC_KosztMAX AS LeadCost_Max,
+            -- Production times
+            crc.CRC_CzasMinMinP AS ProdTime_Min,
+            crc.CRC_CzasOPTIMinP AS ProdTime_Optimum,
+            crc.CRC_CzasMAXMinP AS ProdTime_Max,
+            crc.CRC_CzasMinTypP AS ProdTime_Type,
+            crc.CRC_KosztMinP AS ProdCost_Min,
+            crc.CRC_KosztOPTIP AS ProdCost_Optimum,
+            crc.CRC_KosztMAXP AS ProdCost_Max,
+            crc.CRC_OpisOPTI AS Description
+        FROM dbo.CtiTwrCzasy crc
+        LEFT JOIN CDN.Towary t ON crc.CRC_TwrId = t.Twr_TwrId
+        WHERE crc.CRC_TwrId IS NOT NULL {product_filter}
+        ORDER BY t.Twr_Kod
+        """
+        
+        df = self.execute_query(query, params=params if params else None,
+                               query_name="get_product_lead_times")
+        
+        if not df.empty:
+            # Convert time type to label
+            time_type_map = {1: 'hours', 2: 'days', 3: 'weeks'}
+            if 'LeadTime_Type' in df.columns:
+                df['LeadTime_Unit'] = df['LeadTime_Type'].map(time_type_map).fillna('days')
+            if 'ProdTime_Type' in df.columns:
+                df['ProdTime_Unit'] = df['ProdTime_Type'].map(time_type_map).fillna('days')
+            
+            self._set_cache(cache_key, df)
+        
+        return df
+    
+    def get_bom_with_delivery_info(self, final_product_id: int, technology_id: int = None, 
+                                    warehouse_ids: list = None) -> pd.DataFrame:
+        """
+        Enhanced BOM query that includes delivery times from CtiDelivery.
+        Used by MRP Simulator for production planning with lead times.
+        
+        Args:
+            final_product_id: ID of the final product
+            technology_id: Optional specific technology ID
+            warehouse_ids: Optional warehouse filter for stock
+            
+        Returns:
+            DataFrame with BOM info plus:
+            - DefaultVendor, VendorCode
+            - DeliveryTime_Optimum (days)
+            - MinOrderQty
+        """
+        warehouse_filter = ""
+        if warehouse_ids:
+            warehouse_list = ",".join(map(str, warehouse_ids))
+            warehouse_filter = f" AND z.TwZ_MagId IN ({warehouse_list})"
+        
+        tech_filter = ""
+        params = {"final_product_id": int(final_product_id)}
+        
+        if technology_id is not None:
+            tech_filter = " AND n.CTN_ID = :technology_id"
+            params["technology_id"] = int(technology_id)
+        
+        query = f"""
+        SELECT 
+            elem_t.Twr_TwrId AS IngredientId,
+            elem_t.Twr_Kod AS IngredientCode,
+            elem_t.Twr_Nazwa AS IngredientName,
+            e.CTE_Ilosc AS QuantityPerUnit,
+            elem_t.Twr_JM AS Unit,
+            ISNULL(SUM(z.TwZ_Ilosc), 0) AS CurrentStock,
+            -- Delivery info from CtiDelivery (prefer default vendor)
+            cd.CD_OptimumDeliveryTime AS DeliveryTime_Days,
+            cd.CD_MinAmount AS MinOrderQty,
+            cd.CD_MaxAmount AS MaxOrderQty,
+            k.Knt_Kod AS VendorCode,
+            k.Knt_Nazwa1 AS VendorName,
+            cd.CD_DefaultProvider AS IsDefaultVendor,
+            -- Lead time from CtiTwrCzasy (fallback)
+            crc.CRC_CzasOPTIMin AS LeadTime_Fallback,
+            crc.CRC_CzasOPTITyp AS LeadTime_Type
+        FROM dbo.CtiTechnolNag n WITH (NOLOCK)
+        JOIN dbo.CtiTechnolElem e WITH (NOLOCK) ON n.CTN_ID = e.CTE_CTNId
+        JOIN CDN.Towary elem_t WITH (NOLOCK) ON e.CTE_TwrId = elem_t.Twr_TwrId
+        LEFT JOIN CDN.TwrZasoby z WITH (NOLOCK) ON elem_t.Twr_TwrId = z.TwZ_TwrId{warehouse_filter}
+        -- Join CtiDelivery for delivery info (get default vendor if exists)
+        LEFT JOIN dbo.CtiDelivery cd WITH (NOLOCK) 
+            ON elem_t.Twr_TwrId = cd.CD_TwrId 
+            AND (cd.CD_DefaultProvider = 1 OR cd.CD_ID = (
+                SELECT TOP 1 cd2.CD_ID FROM dbo.CtiDelivery cd2 
+                WHERE cd2.CD_TwrId = elem_t.Twr_TwrId ORDER BY cd2.CD_DefaultProvider DESC
+            ))
+        LEFT JOIN CDN.Kontrahenci k WITH (NOLOCK) ON cd.CD_KntId = k.Knt_KntId
+        -- Join CtiTwrCzasy for lead time fallback
+        LEFT JOIN dbo.CtiTwrCzasy crc WITH (NOLOCK) ON elem_t.Twr_TwrId = crc.CRC_TwrId
+        WHERE n.CTN_TwrId = :final_product_id
+          AND e.CTE_Typ IN (1, 2)
+          AND elem_t.Twr_Typ != 2
+          {tech_filter}
+        GROUP BY 
+            elem_t.Twr_TwrId, elem_t.Twr_Kod, elem_t.Twr_Nazwa, 
+            e.CTE_Ilosc, elem_t.Twr_JM,
+            cd.CD_OptimumDeliveryTime, cd.CD_MinAmount, cd.CD_MaxAmount,
+            k.Knt_Kod, k.Knt_Nazwa1, cd.CD_DefaultProvider,
+            crc.CRC_CzasOPTIMin, crc.CRC_CzasOPTITyp
+        ORDER BY e.CTE_Ilosc DESC
+        """
+        
+        df = self.execute_query(query, params=params,
+                               query_name=f"get_bom_with_delivery_info({final_product_id})")
+        
+        if not df.empty:
+            # Use fallback lead time if no CtiDelivery data
+            df['DeliveryTime_Days'] = df.apply(
+                lambda row: row['DeliveryTime_Days'] if pd.notna(row['DeliveryTime_Days']) and row['DeliveryTime_Days'] > 0
+                else (row['LeadTime_Fallback'] if row.get('LeadTime_Type') == 2 else 0),
+                axis=1
+            )
+            df['DeliveryTime_Days'] = df['DeliveryTime_Days'].fillna(0).astype(int)
+        
+        return df
+    
+    # ========== CTI Deep Integration Methods ==========
+    
+    def get_cti_holidays(self, year_from: int = None, year_to: int = None, use_cache: bool = True) -> pd.DataFrame:
+        """
+        Fetches company holidays from CtiHolidays table.
+        Better than holidays library - includes Easter and company-specific days.
+        
+        Args:
+            year_from: Optional start year filter
+            year_to: Optional end year filter
+            use_cache: If True, returns cached data
+            
+        Returns:
+            DataFrame with columns: HolidayDate (as datetime)
+        """
+        cache_key = f"cti_holidays_{year_from}_{year_to}"
+        
+        if use_cache:
+            cached = self._get_from_cache(cache_key)
+            if cached is not None:
+                return cached
+        
+        year_filter = ""
+        if year_from and year_to:
+            year_filter = f"WHERE YEAR(CH_Date) BETWEEN {int(year_from)} AND {int(year_to)}"
+        elif year_from:
+            year_filter = f"WHERE YEAR(CH_Date) >= {int(year_from)}"
+        elif year_to:
+            year_filter = f"WHERE YEAR(CH_Date) <= {int(year_to)}"
+        
+        query = f"""
+        SELECT CH_Date AS HolidayDate
+        FROM dbo.CtiHolidays
+        {year_filter}
+        ORDER BY CH_Date
+        """
+        
+        df = self.execute_query(query, query_name="get_cti_holidays")
+        
+        if not df.empty:
+            df['HolidayDate'] = pd.to_datetime(df['HolidayDate'])
+            self._set_cache(cache_key, df)
+        
+        return df
+    
+    def get_cti_holidays_set(self, year_from: int = 2020, year_to: int = 2030) -> set:
+        """
+        Returns holidays as a set for fast lookup in forecasting.
+        
+        Returns:
+            Set of datetime.date objects
+        """
+        df = self.get_cti_holidays(year_from, year_to)
+        if df.empty:
+            return set()
+        return set(df['HolidayDate'].dt.date.tolist())
+    
+    def get_product_substitutes(self, product_id: int = None, technology_id: int = None, 
+                                 use_cache: bool = True) -> pd.DataFrame:
+        """
+        Fetches product substitutes from CtiTechnolZamienniki.
+        Critical for MRP when main ingredient is unavailable.
+        
+        Args:
+            product_id: Filter by original product ID
+            technology_id: Filter by technology ID
+            use_cache: If True, returns cached data
+            
+        Returns:
+            DataFrame with columns:
+            - OriginalId, OriginalCode, OriginalName
+            - SubstituteId, SubstituteCode, SubstituteName
+            - IsAllowed, SubstituteType
+        """
+        cache_key = f"substitutes_{product_id}_{technology_id}"
+        
+        if use_cache:
+            cached = self._get_from_cache(cache_key)
+            if cached is not None:
+                return cached
+        
+        filters = []
+        params = {}
+        
+        if product_id is not None:
+            filters.append("z.CTM_TwrID = :product_id")
+            params["product_id"] = product_id
+        if technology_id is not None:
+            filters.append("z.CTM_CTNID = :technology_id")
+            params["technology_id"] = technology_id
+        
+        where_clause = "WHERE " + " AND ".join(filters) if filters else ""
+        
+        query = f"""
+        SELECT 
+            z.CTM_TwrID AS OriginalId,
+            t_orig.Twr_Kod AS OriginalCode,
+            t_orig.Twr_Nazwa AS OriginalName,
+            z.CTM_ZamID AS SubstituteId,
+            t_zam.Twr_Kod AS SubstituteCode,
+            t_zam.Twr_Nazwa AS SubstituteName,
+            z.CTM_Dozwolony AS IsAllowed,
+            z.CTM_Typ AS SubstituteType,
+            z.CTM_CTNID AS TechnologyId
+        FROM dbo.CtiTechnolZamienniki z
+        LEFT JOIN CDN.Towary t_orig ON z.CTM_TwrID = t_orig.Twr_TwrId
+        LEFT JOIN CDN.Towary t_zam ON z.CTM_ZamID = t_zam.Twr_TwrId
+        {where_clause}
+        ORDER BY t_orig.Twr_Kod
+        """
+        
+        df = self.execute_query(query, params=params if params else None,
+                               query_name="get_product_substitutes")
+        
+        if not df.empty:
+            self._set_cache(cache_key, df)
+        
+        return df
+    
+    def get_shortage_analysis_cti(self, warehouse_id: int = None, 
+                                   department_id: int = None) -> pd.DataFrame:
+        """
+        Calls CTI's built-in shortage analysis logic via CTIProdukcjaBrakiSurowca procedure.
+        Uses the same business logic as the CTI Production program.
+        
+        Args:
+            warehouse_id: Optional warehouse filter
+            department_id: Optional department (Dział) filter
+            
+        Returns:
+            DataFrame with shortage analysis results
+        """
+        # First get existing shortages from CtiBrakiElem with details
+        query = """
+        SELECT 
+            bn.CBN_NrPelny AS ShortageDocNumber,
+            bn.CBN_DataRealizacji AS RealizationDate,
+            bn.CBN_Status AS Status,
+            be.CBE_TwrId AS ProductId,
+            t.Twr_Kod AS ProductCode,
+            t.Twr_Nazwa AS ProductName,
+            be.CBE_Ilosc AS ShortageQty,
+            be.CBE_DostawcaID AS VendorId,
+            k.Knt_Kod AS VendorCode,
+            k.Knt_Nazwa1 AS VendorName,
+            be.CBE_MagazynID AS WarehouseId,
+            be.CBE_DzialID AS DepartmentId
+        FROM dbo.CtiBrakiNag bn
+        JOIN dbo.CtiBrakiElem be ON bn.CBN_ID = be.CBE_CBNId
+        LEFT JOIN CDN.Towary t ON be.CBE_TwrId = t.Twr_TwrId
+        LEFT JOIN CDN.Kontrahenci k ON be.CBE_DostawcaID = k.Knt_KntId
+        WHERE bn.CBN_Status = 0  -- Active shortages only
+        ORDER BY bn.CBN_DataRealizacji DESC, be.CBE_Ilosc DESC
+        """
+        
+        df = self.execute_query(query, query_name="get_shortage_analysis_cti")
+        
+        return df
+    
+    def get_production_departments(self, use_cache: bool = True) -> pd.DataFrame:
+        """
+        Fetches production departments from CtiDzial with warehouse mappings.
+        
+        Returns:
+            DataFrame with department info and source/destination warehouses
+        """
+        cache_key = "production_departments"
+        
+        if use_cache:
+            cached = self._get_from_cache(cache_key)
+            if cached is not None:
+                return cached
+        
+        query = """
+        SELECT 
+            d.CDZ_ID AS DepartmentId,
+            d.CDZ_Kod AS DepartmentCode,
+            d.CDZ_MagSId AS SourceWarehouseId,
+            ms.Mag_Symbol AS SourceWarehouseCode,
+            d.CDZ_MagPId AS DestWarehouseId,
+            mp.Mag_Symbol AS DestWarehouseCode
+        FROM dbo.CtiDzial d
+        LEFT JOIN CDN.Magazyny ms ON d.CDZ_MagSId = ms.Mag_MagId
+        LEFT JOIN CDN.Magazyny mp ON d.CDZ_MagPId = mp.Mag_MagId
+        ORDER BY d.CDZ_Kod
+        """
+        
+        df = self.execute_query(query, query_name="get_production_departments")
+        
+        if not df.empty:
+            self._set_cache(cache_key, df)
+        
+        return df
+    
+    def get_production_resources(self, department_id: int = None, 
+                                  use_cache: bool = True) -> pd.DataFrame:
+        """
+        Fetches production resources (CtiZasob) with costs and work times.
+        Useful for capacity planning and cost estimation.
+        
+        Args:
+            department_id: Optional filter by department
+            use_cache: If True, returns cached data
+            
+        Returns:
+            DataFrame with resource info including hourly costs
+        """
+        cache_key = f"production_resources_{department_id}"
+        
+        if use_cache:
+            cached = self._get_from_cache(cache_key)
+            if cached is not None:
+                return cached
+        
+        dept_filter = ""
+        params = {}
+        if department_id is not None:
+            dept_filter = "WHERE z.CZ_DzialID = :department_id"
+            params["department_id"] = department_id
+        
+        query = f"""
+        SELECT 
+            z.CZ_ID AS ResourceId,
+            z.CZ_Kod AS ResourceCode,
+            z.CZ_KosztPracy AS HourlyCost,
+            z.CZ_CzasPracy AS WorkTime,
+            z.CZ_CzasUzbrojenia AS SetupTime,
+            z.CZ_JMCzasu AS TimeUnit,  -- 1=hours, 2=days
+            z.CZ_DzialID AS DepartmentId,
+            z.CZ_Typ AS ResourceType,
+            z.CZ_KontrolaDostepnosci AS AvailabilityCheck
+        FROM dbo.CtiZasob z
+        {dept_filter}
+        ORDER BY z.CZ_Kod
+        """
+        
+        df = self.execute_query(query, params=params if params else None,
+                               query_name="get_production_resources")
+        
+        if not df.empty:
+            self._set_cache(cache_key, df)
+        
+        return df
+    
+    def get_order_statuses(self) -> pd.DataFrame:
+        """
+        Fetches production order status dictionary from CtiStatusy.
+        Useful for understanding production workflow states.
+        
+        Returns:
+            DataFrame with status codes and names by type
+        """
+        query = """
+        SELECT 
+            CS_StatusNr AS StatusCode,
+            CS_Typ AS StatusType,
+            CS_StatusNazwa AS StatusName
+        FROM dbo.CtiStatusy
+        ORDER BY CS_Typ, CS_StatusNr
+        """
+        
+        return self.execute_query(query, query_name="get_order_statuses")
+
+
