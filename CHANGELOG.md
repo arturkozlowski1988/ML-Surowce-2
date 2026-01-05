@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.4.1] - 2026-01-05
+
+### Added
+
+- **🎓 Prezentacja Akademicka**:
+  - Całkowita restrukturyzacja `notebooks/prezentacja_akademicka.ipynb`
+  - Struktura zgodna z programem studiów Merito "Analiza Danych - Data Science z elementami AI"
+  - Fokus na realny problem biznesowy (zarządzanie zakupami surowców) i rozwiązanie
+  - Praktyczne demonstracje: EDA, Machine Learning (RF, GB), AI Assistant (LLM)
+  - Powiązania z technologiami z programu studiów
+
+### Changed
+
+- `readme.md` - dodana sekcja "Kontekst Akademicki" z informacjami o studiach podyplomowych
+- `readme.md` - zaktualizowane informacje o autorze
+- `TECHNICAL_DOCUMENTATION.md` - zaktualizowana wersja do 1.4.0, data do 2026-01-05
+
+### Documentation
+
+- Zaktualizowano linki do notebooków w dokumentacji
+- Dodano informacje o Uniwersytecie WSB Merito Chorzów
+
+---
+
 ## [1.4.0] - 2026-01-01
 
 ### Added

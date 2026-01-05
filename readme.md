@@ -121,7 +121,20 @@ ai-supply-assistant/
 - [Instrukcja Użytkownika](USER_GUIDE.md) - Przewodnik dla użytkowników końcowych
 - [Dokumentacja Techniczna](TECHNICAL_DOCUMENTATION.md) - Architektura i API
 - [Historia Zmian](CHANGELOG.md) - Changelog projektu
-- [Demo Notebook](notebooks/demo_walkthrough.ipynb) - Interaktywne demo
+- [Prezentacja Akademicka](notebooks/prezentacja_akademicka.ipynb) - Jupyter Notebook z demonstracją projektu
+
+---
+
+## 🎓 Kontekst Akademicki
+
+Projekt realizowany w ramach studiów podyplomowych **"Analiza Danych - Data Science z elementami AI"** na Uniwersytecie WSB Merito Chorzów.
+
+Projekt demonstruje praktyczne zastosowanie technik omawianych w programie studiów:
+
+- Python i biblioteki Data Science (pandas, numpy, scikit-learn)
+- Eksploracyjna Analiza Danych (EDA)
+- Machine Learning (Random Forest, Gradient Boosting, Time Series)
+- Sztuczna Inteligencja (LLM, Prompt Engineering)
 
 ---
 
@@ -143,5 +156,7 @@ Ten projekt jest licencjonowany na warunkach [MIT License](LICENSE).
 
 ## 👤 Autor
 
-**Projekt Dyplomowy** - Inteligentny Asystent Zakupowy  
-*2024-2025*
+**Artur Kozłowski** - Projekt Zaliczeniowy  
+Studia podyplomowe: *Analiza Danych - Data Science z elementami AI*  
+Uniwersytet WSB Merito Chorzów  
+*2025-2026*

@@ -1,7 +1,7 @@
 # Dokumentacja Techniczna: AI Supply Assistant
 
-> **Wersja**: 1.3.0  
-> **Data aktualizacji**: 2024-12-29  
+> **Wersja**: 1.4.0  
+> **Data aktualizacji**: 2026-01-05  
 > **System**: ERP Comarch Optima / Produkcja by CTI  
 > **Środowisko**: Python 3.9+, MS SQL Server, Streamlit
 
@@ -43,7 +43,6 @@ Aplikacja wykorzystuje wzorzec **MVVM (Model-View-ViewModel)** w warstwie prezen
 | **Baza Danych** | MS SQL Server (Comarch Optima/CDN) |
 | **ML/AI** | scikit-learn, statsmodels, Google Gemini API, Ollama, llama-cpp-python |
 | **Bezpieczeństwo** | python-dotenv, cryptography (Fernet), audit logging |
-
 
 ### Struktura Katalogów
 
@@ -95,10 +94,12 @@ ai-supply-assistant/
 **Parametry wejściowe**: Brak (konfiguracja z `.env`).
 
 **Główne funkcje**:
+
 - `main()`: Punkt wejścia aplikacji.
 - `get_db_connection()`: Cached factory dla DatabaseConnector (singleton pattern via `@st.cache_resource`).
 
 **Routing logika**:
+
 ```python
 if app_mode == "Analiza Danych":
     render_analysis_view(...)
@@ -109,6 +110,7 @@ elif app_mode == "AI Assistant (GenAI)":
 ```
 
 **Zależności**:
+
 - `src.db_connector.DatabaseConnector`
 - `src.gui.views.*`
 - `src.preprocessing`
@@ -135,7 +137,7 @@ Nagłówek zlecenia produkcyjnego.
 | `CZN_DataRealizacji` | DATETIME | Data realizacji produkcji |
 | `CZN_Status` | INT | Status zlecenia (1 = Aktywny) |
 
-**Klauzula `NOLOCK`**: Używana w zapytaniach raportowych (read-only). 
+**Klauzula `NOLOCK`**: Używana w zapytaniach raportowych (read-only).
 
 ⚠️ **UWAGA**: `WITH (NOLOCK)` może odczytać niezcommitowane dane (dirty reads). Dopuszczalne w raportach, **NIE stosować w transakcjach modyfikujących dane**.
 
@@ -232,7 +234,6 @@ ON dbo.CtiTechnolNag(CTN_TwrId);
 
 **Weryfikacja indeksów**: Użyj funkcji `DatabaseConnector.check_and_create_indexes()`, która zwraca listę brakujących indeksów.
 
-
 ---
 
 ## Moduł DatabaseConnector
@@ -242,6 +243,7 @@ ON dbo.CtiTechnolNag(CTN_TwrId);
 ### Cel Biznesowy
 
 Centralna warstwa dostępu do danych SQL. Zapewnia:
+
 - Połączenie pooling (wydajność)
 - Query caching (TTL 5 min)
 - Diagnostyka wydajności
@@ -257,9 +259,11 @@ DatabaseConnector(
 ```
 
 **Zmienne środowiskowe** (`.env`):
+
 - `DB_CONN_STR` (WYMAGANE): Connection string MS SQL (format SQLAlchemy).
 
 **Przykład Connection String**:
+
 ```
 mssql+pyodbc://user:password@SERVER\INSTANCE/database?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes
 ```
@@ -286,12 +290,14 @@ create_engine(
 **Cache Key Pattern**: `{query_name}_{param1}_{param2}...`
 
 **Przykład**:
+
 ```python
 # Cache key: "historical_data_2024-01-01_2024-12-31"
 df = db.get_historical_data(date_from="2024-01-01", date_to="2024-12-31")
 ```
 
 **Czyszczenie cache**:
+
 ```python
 db.clear_cache()                    # Wszystkie
 db.clear_cache("historical_data")  # Konkretny klucz
@@ -306,6 +312,7 @@ db.clear_cache("historical_data")  # Konkretny klucz
 **Wyjście**: DataFrame z kolumnami `['Week', 'Year', 'TowarId', 'Quantity']`.
 
 **Query SQL** (uproszczony):
+
 ```sql
 SELECT 
     DATEPART(ISO_WEEK, n.CZN_DataRealizacji) as Week,
@@ -325,6 +332,7 @@ ORDER BY Year, Week
 ```
 
 **Parametry**:
+
 - `date_from`, `date_to`: Filtrowanie zakresu dat (parametryzowane - **bezpieczne przed SQL Injection**).
 
 **Zależności tabel**: `CtiZlecenieElem` → `CtiZlecenieNag` → `Towary`.
@@ -368,21 +376,23 @@ ORDER BY Year, Week
 **Klasa**: `QueryDiagnostics`
 
 **Funkcje**:
+
 - Logowanie czasu wykonania każdego zapytania.
 - Ostrzeżenie o wolnych zapytaniach (> 1.0s).
 
 **Statystyki**:
+
 ```python
 stats = db.get_diagnostics_stats()
 # Output: {'total_queries': 15, 'avg_duration': 0.32, 'max_duration': 1.2, 'slow_queries': 1}
 ```
-
 
 ---
 
 ## Silniki AI
 
 Aplikacja wspiera **3 silniki AI**:
+
 1. **Google Gemini** (Cloud)
 2. **Ollama** (Local Server)
 3. **Local LLM** (Embedded - llama-cpp-python)
@@ -394,14 +404,17 @@ Aplikacja wspiera **3 silniki AI**:
 **Model**: `gemini-2.0-flash` (najnowszy, grudzień 2024).
 
 **Parametry wejściowe**:
+
 - `GEMINI_API_KEY` (zmienna środowiskowa) - klucz API Google.
 
 **Metody**:
+
 - `generate_explanation(prompt: str) -> str`: Generuje odpowiedź na prompt.
 
 **Retry Logic**: 3 próby z exponential backoff (1s, 2s, 3s).
 
-**Bezpieczeństwo**: 
+**Bezpieczeństwo**:
+
 - Dane są **anonimizowane** przed wysyłką (moduł `anonymizer.py`).
 - NIP, PESEL, email są maskowane (regex patterns).
 
@@ -412,10 +425,12 @@ Aplikacja wspiera **3 silniki AI**:
 **Wymagania**: Uruchomiona usługa Ollama (`ollama serve`).
 
 **Parametry**:
+
 - `OLLAMA_HOST` (env, domyślnie: `http://localhost:11434`)
 - `model_name` (domyślnie: `llama3.1`)
 
 **Obsługiwane modele**:
+
 - `llama3.2` (szybki, uniwersalny)
 - `ministral-3:8b` (kompaktowy, szybki)
 
@@ -439,6 +454,7 @@ Aplikacja wspiera **3 silniki AI**:
 **Lokalizacja modeli**: `models/*.gguf`
 
 **Parametry inicjalizacji**:
+
 ```python
 LocalLLMEngine(
     model_path: str = None,     # Ścieżka do pliku .gguf (z env: LOCAL_LLM_PATH)
@@ -479,12 +495,14 @@ LocalLLMEngine(
 **Algorytm**: Ensemble decision trees (100 drzew).
 
 **Feature Engineering**:
+
 - `WeekOfYear`: Numer tygodnia (seasonality)
 - `Month`: Miesiąc (seasonality)
 - `Lag_1`, `Lag_2`, `Lag_3`: Wartości z t-1, t-2, t-3
 - `Rolling_Mean_4`: Średnia krocząca z 4 tygodni
 
 **Hiperparametry**:
+
 ```python
 RandomForestRegressor(
     n_estimators=100,
@@ -503,6 +521,7 @@ RandomForestRegressor(
 **Algorytm**: Gradient Boosted Trees (sekwencyjne uczenie).
 
 **Hiperparametry**:
+
 ```python
 GradientBoostingRegressor(
     n_estimators=100,
@@ -521,6 +540,7 @@ GradientBoostingRegressor(
 **Biblioteka**: statsmodels.tsa.holtwinters.ExponentialSmoothing
 
 **Konfiguracja**:
+
 - **Trend**: Additive (`trend='add'`)
 - **Seasonality**: Additive (`seasonal='add'`, period=4 weeks) - jeśli >= 12 tygodni danych
 - Fallback: Tylko trend jeśli < 12 tygodni
@@ -540,6 +560,7 @@ GradientBoostingRegressor(
 **Wyjście**: DataFrame z kolumną `'Date'` (Timestamp) utworzoną z ISO Week.
 
 **Implementacja**:
+
 ```python
 df['Date'] = df.apply(
     lambda row: pd.Timestamp.fromisocalendar(int(row['Year']), int(row['Week']), 1), 
@@ -554,6 +575,7 @@ df['Date'] = df.apply(
 **Cel**: Wypełnia brakujące tygodnie zerami dla każdego produktu.
 
 **Algorytm**:
+
 1. Generuj pełny zakres dat (min → max) z częstotliwością `'W-MON'`.
 2. Utwórz MultiIndex `(TowarId, Date)`.
 3. Reindex DataFrame, wypełniając brakujące `Quantity=0`.
@@ -573,6 +595,7 @@ df['Date'] = df.apply(
 **Format**: JSON (łatwe parsowanie).
 
 **Typy Zdarzeń** (`AuditEventType`):
+
 - `LOGIN_SUCCESS`, `LOGIN_FAILURE`
 - `SESSION_START`, `SESSION_END`
 - `DATA_ACCESS`, `DATA_EXPORT`
@@ -596,6 +619,7 @@ df['Date'] = df.apply(
 **Key Derivation**: PBKDF2-SHA256 z 480,000 iteracji (OWASP 2023 recommendation).
 
 **Parametry**:
+
 - `ENCRYPTION_MASTER_KEY` (env, **WYMAGANE**) - master key
 - `ENCRYPTION_SALT` (env, domyślnie: `AI_Supply_Assistant_v1_2025`) - salt dla KDF
 
@@ -638,12 +662,14 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 #### 1. Sidebar (`sidebar.py`)
 
 **Funkcje**:
+
 - `render_connection_settings(on_connect)`: Formularz połączenia ręcznego z SQL.
 - `render_connection_status(is_connected)`: Wskaźnik statusu połączenia.
 - `render_mode_selector()`: Wybór trybu aplikacji (Analiza/Predykcja/AI).
 - `render_date_filters()`: Filtry zakresu dat.
 
-**Bezpieczeństwo**: 
+**Bezpieczeństwo**:
+
 - **NIE ma** domyślnych credentials (empty placeholders).
 - Hasło w `type="password"` (masked input).
 
@@ -656,6 +682,7 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 **Funkcja**: `render_analysis_view(...)`
 
 **Funkcjonalności**:
+
 - Wykres trendu zużycia (Plotly Line Chart).
 - Panel Zakupowca:
   - Wykres "Gdzie używany surowiec" (TOP 20 wyrobów gotowych).
@@ -669,6 +696,7 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 **Funkcja**: `render_prediction_view(...)`
 
 **Funkcjonalności**:
+
 - Wybór modelu predykcyjnego (Baseline/RF/GB/ES).
 - Prognoza na 4 tygodnie.
 - Wykres: historyczny + prognoza (różne kolory).
@@ -680,6 +708,7 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 **Funkcja**: `render_assistant_view(...)`
 
 **Funkcjonalności**:
+
 - Wybór silnika AI (Gemini/Ollama/Local LLM).
 - **Model Comparison Mode**: Porównanie dwóch modeli lokalnych (benchmark).
 - 2 tryby analizy:
@@ -695,6 +724,7 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 ### Wzorzec MVVM
 
 **Separacja odpowiedzialności**:
+
 - **View**: Renderowanie UI (Streamlit components).
 - **ViewModel**: Logika biznesowa, transformacja danych, state management.
 - **Model**: Źródło danych (DatabaseConnector, Forecaster).
@@ -704,6 +734,7 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 **Plik**: `src/viewmodels/base_viewmodel.py`
 
 **Klasy**:
+
 - `ViewModelState`: Base dataclass dla stanu ViewModel.
 - `LoadingState`: Enum (IDLE, LOADING, SUCCESS, ERROR).
 - `BaseViewModel`: Bazowa klasa abstrakcyjna.
@@ -713,11 +744,13 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 **Plik**: `src/viewmodels/analysis_viewmodel.py`
 
 **Klasy**:
+
 - `AnalysisSummary`: Statystyki (total_quantity, top_products, trend_direction).
 - `AnalysisState`: Stan (df_stock, df_historical, df_filtered, product_map, summary).
 - `AnalysisViewModel`: Logika analizy danych.
 
 **Metody**:
+
 - `load_all_data(force_refresh=False)`: Ładuje stock + historical data.
 - `apply_date_filter(start_date, end_date)`: Filtruje dane po dacie.
 - `calculate_summary()`: Oblicza statystyki (total quantity, top products, trend).
@@ -737,11 +770,13 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 **Rozwiązanie**: Asynchroniczne wykonanie query w osobnym wątku.
 
 **Klasy**:
+
 - `LoadingState`: Enum (IDLE, LOADING, COMPLETED, ERROR).
 - `LoadResult`: Kontener wyniku (state, data, error, duration_ms).
 - `AsyncDataLoader`: Główna klasa.
 
 **Thread Pool**:
+
 - Wspólny pula dla wszystkich instancji (Singleton pattern).
 - Liczba workerów: 3.
 
@@ -750,6 +785,7 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 #### `load_async(task_id, loader_fn, force_reload=False, cache_ttl=300.0)`
 
 **Parametry**:
+
 - `task_id`: Unikalny ID zadania (np. `"historical_data_2024"`).
 - `loader_fn`: Funkcja ładująca dane (callable, np. `lambda: db.get_historical_data()`).
 - `cache_ttl`: Czas życia cache (sekundy).
@@ -763,12 +799,14 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 ### Zmienne Środowiskowe (.env)
 
 **Wymagane**:
+
 ```bash
 # Database Connection (REQUIRED)
 DB_CONN_STR=mssql+pyodbc://user:pass@SERVER\INSTANCE/database?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes
 ```
 
 **Opcjonalne (AI)**:
+
 ```bash
 # Google Gemini (Cloud AI)
 GEMINI_API_KEY=AIzaSyC...
@@ -781,6 +819,7 @@ LOCAL_LLM_PATH=models/qwen2.5-7b-instruct-q3_k_m.gguf
 ```
 
 **Opcjonalne (Security)**:
+
 ```bash
 # Encryption
 ENCRYPTION_MASTER_KEY=your_master_key_here
@@ -793,6 +832,7 @@ AUDIT_LOG_PATH=logs/security_audit.log
 ### Instalacja Zależności
 
 **Główne biblioteki**:
+
 - `streamlit>=1.30`
 - `pandas>=1.5`
 - `sqlalchemy>=2.0`
@@ -806,6 +846,7 @@ AUDIT_LOG_PATH=logs/security_audit.log
 - `python-dotenv>=1.0`
 
 **Instalacja**:
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -813,11 +854,13 @@ pip install -r requirements.txt
 ### Uruchomienie Aplikacji
 
 **Development**:
+
 ```bash
 streamlit run main.py
 ```
 
 **Production**:
+
 ```bash
 streamlit run main.py --server.port 8501 --server.address 0.0.0.0
 ```
@@ -831,6 +874,7 @@ streamlit run main.py --server.port 8501 --server.address 0.0.0.0
 **Lokalizacja**: `scripts/`
 
 **Przykłady**:
+
 - `test_db.py`: Test połączenia z bazą.
 - `test_ml_pipeline.py`: Test pipeline ML (preprocessing → forecasting).
 - `test_qwen_7b.py`: Test modelu Qwen2.5-7B.
@@ -842,6 +886,7 @@ streamlit run main.py --server.port 8501 --server.address 0.0.0.0
 ### Performance Testing
 
 **Metryki**:
+
 - Query execution time (target: < 1.0s).
 - Forecast generation time (target: < 5.0s dla 1 produktu).
 - LLM response time (Local LLM: 10-30s, Gemini: 2-5s).
@@ -849,6 +894,7 @@ streamlit run main.py --server.port 8501 --server.address 0.0.0.0
 ### Security Testing
 
 **Checklist**:
+
 - ✅ Parametryzowane zapytania SQL (wszystkie metody `execute_query`).
 - ✅ Brak hardcoded credentials w kodzie.
 - ✅ `.env.example` nie zawiera prawdziwych secrets.
