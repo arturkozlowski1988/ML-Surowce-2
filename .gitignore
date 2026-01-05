@@ -67,3 +67,10 @@ notebooks/.ipynb_checkpoints/
 .DS_Store
 Thumbs.db
 
+# Archive (deprecated scripts)
+scripts/archive/
+
+# Build artifacts
+*.spec
+build/
+dist/

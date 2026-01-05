@@ -1237,5 +1237,498 @@ class DatabaseConnector:
         """
         
         return self.execute_query(query, query_name="get_order_statuses")
+    
+    # ========== CTI Deep Integration - U1: Production Status ==========
+    
+    def get_production_status(self, order_id: int = None, use_cache: bool = True) -> pd.DataFrame:
+        """
+        [U1] Fetches production status from CtiProdukcjaStatus.
+        Critical for MRP: determines which orders are complete vs in-progress.
+        
+        Args:
+            order_id: Specific order ID. If None, returns all recent statuses.
+            use_cache: If True, returns cached data if available
+            
+        Returns:
+            DataFrame with columns:
+            - OrderId, OrderNumber
+            - MaterialsIssued (0/1=NIE, 2=CZĘŚCIOWO, 3=TAK)
+            - ProductReceived (0/1=NIE, 2=CZĘŚCIOWO, 3=TAK)
+            - CompletedQty
+            - StatusCode (from CtiStatusy)
+            - StatusName
+            - LastModified
+        """
+        cache_key = f"production_status_{order_id or 'all'}"
+        
+        if use_cache:
+            cached = self._get_from_cache(cache_key)
+            if cached is not None:
+                return cached
+        
+        order_filter = ""
+        params = {}
+        if order_id is not None:
+            order_filter = "AND ps.CPS_DokID = :order_id"
+            params["order_id"] = order_id
+        
+        query = f"""
+        SELECT 
+            ps.CPS_DokID AS OrderId,
+            zn.CZN_NrPelny AS OrderNumber,
+            ps.CPS_StatusMMWydane AS MaterialsIssued,
+            ps.CPS_StatusPWWG AS ProductReceived,
+            ps.IloscZrealizowana AS CompletedQty,
+            ps.CPS_StatusProdukcjaEnum AS StatusCode,
+            cs.CS_StatusNazwa AS StatusName,
+            ps.DataModyfikacji AS LastModified,
+            zn.CZN_Ilosc AS TargetQty,
+            CASE 
+                WHEN ps.IloscZrealizowana >= zn.CZN_Ilosc THEN 'ZAKOŃCZONE'
+                WHEN ps.IloscZrealizowana > 0 THEN 'W REALIZACJI'
+                ELSE 'NIE ROZPOCZĘTE'
+            END AS RealizationStatus
+        FROM dbo.CtiProdukcjaStatus ps
+        LEFT JOIN dbo.CtiZlecenieNag zn ON ps.CPS_DokID = zn.CZN_ID
+        LEFT JOIN dbo.CtiStatusy cs ON ps.CPS_StatusProdukcjaEnum = cs.CS_StatusNr AND cs.CS_Typ = 1
+        WHERE ps.CPS_DokTyp = 6  -- Production Orders (ZP)
+        {order_filter}
+        ORDER BY ps.DataModyfikacji DESC
+        """
+        
+        df = self.execute_query(query, params=params if params else None,
+                               query_name="get_production_status")
+        
+        if not df.empty:
+            self._set_cache(cache_key, df)
+        
+        return df
+    
+    def get_active_orders_demand(self, product_ids: list = None, 
+                                  exclude_completed: bool = True) -> pd.DataFrame:
+        """
+        [U1 Extension] Gets raw material demand from active (non-completed) production orders.
+        Essential for calculating net requirements in MRP.
+        
+        Args:
+            product_ids: Optional list of ingredient product IDs to filter
+            exclude_completed: If True, excludes orders with CompletedQty >= TargetQty
+            
+        Returns:
+            DataFrame with pending demand per ingredient from active orders
+        """
+        product_filter = ""
+        completed_filter = ""
+        
+        if product_ids:
+            product_list = ",".join(map(str, product_ids))
+            product_filter = f"AND ze.CZE_TwrId IN ({product_list})"
+        
+        if exclude_completed:
+            completed_filter = """
+            AND (
+                ps.IloscZrealizowana IS NULL 
+                OR ps.IloscZrealizowana < zn.CZN_Ilosc
+            )
+            """
+        
+        query = f"""
+        SELECT 
+            ze.CZE_TwrId AS IngredientId,
+            t.Twr_Kod AS IngredientCode,
+            t.Twr_Nazwa AS IngredientName,
+            SUM(ze.CZE_Ilosc * (zn.CZN_Ilosc - ISNULL(ps.IloscZrealizowana, 0))) AS PendingDemand,
+            COUNT(DISTINCT zn.CZN_ID) AS ActiveOrderCount
+        FROM dbo.CtiZlecenieElem ze WITH (NOLOCK)
+        JOIN dbo.CtiZlecenieNag zn WITH (NOLOCK) ON ze.CZE_CZNId = zn.CZN_ID
+        LEFT JOIN dbo.CtiProdukcjaStatus ps ON zn.CZN_ID = ps.CPS_DokID AND ps.CPS_DokTyp = 6
+        LEFT JOIN CDN.Towary t WITH (NOLOCK) ON ze.CZE_TwrId = t.Twr_TwrId
+        WHERE ze.CZE_Typ IN (1, 2)  -- Raw materials only
+          AND zn.CZN_Status > 0     -- Active orders only
+          {product_filter}
+          {completed_filter}
+        GROUP BY ze.CZE_TwrId, t.Twr_Kod, t.Twr_Nazwa
+        ORDER BY PendingDemand DESC
+        """
+        
+        return self.execute_query(query, query_name="get_active_orders_demand")
+    
+    # ========== CTI Deep Integration - U2: Shortage Synchronization ==========
+    
+    def compare_with_cti_shortages(self, calculated_shortages: pd.DataFrame,
+                                    warehouse_id: int = None) -> dict:
+        """
+        [U2] Compares AI-calculated shortages with existing CTI shortage documents.
+        Enables synchronization between AI recommendations and CTI workflow.
+        
+        Args:
+            calculated_shortages: DataFrame with columns [IngredientId, ShortageQty]
+            warehouse_id: Optional warehouse filter
+            
+        Returns:
+            dict with keys:
+            - 'new_shortages': Items to add to CTI (not in existing docs)
+            - 'already_in_cti': Items already registered in CTI
+            - 'cti_resolved': CTI items that may no longer be needed
+            - 'summary': Text summary for AI
+        """
+        # Get existing CTI shortages
+        cti_shortages = self.get_shortage_analysis_cti(warehouse_id=warehouse_id)
+        
+        result = {
+            'new_shortages': [],
+            'already_in_cti': [],
+            'cti_resolved': [],
+            'summary': ''
+        }
+        
+        if calculated_shortages.empty:
+            result['summary'] = "Brak wyliczonych braków do porównania."
+            return result
+        
+        if cti_shortages.empty:
+            result['new_shortages'] = calculated_shortages.to_dict('records')
+            result['summary'] = f"Wszystkie {len(calculated_shortages)} braki do zgłoszenia w CTI."
+            return result
+        
+        # Create lookup for CTI shortages by product ID
+        cti_products = set(cti_shortages['ProductId'].tolist()) if 'ProductId' in cti_shortages.columns else set()
+        
+        for _, row in calculated_shortages.iterrows():
+            product_id = row.get('IngredientId') or row.get('ProductId')
+            if product_id in cti_products:
+                result['already_in_cti'].append(row.to_dict())
+            else:
+                result['new_shortages'].append(row.to_dict())
+        
+        # Find CTI items not in calculated shortages (potentially resolved)
+        calc_products = set(calculated_shortages.get('IngredientId', calculated_shortages.get('ProductId', [])).tolist())
+        for _, row in cti_shortages.iterrows():
+            if row['ProductId'] not in calc_products:
+                result['cti_resolved'].append(row.to_dict())
+        
+        # Generate summary
+        lines = []
+        if result['new_shortages']:
+            lines.append(f"🆕 Nowe braki do zgłoszenia: {len(result['new_shortages'])}")
+        if result['already_in_cti']:
+            lines.append(f"✅ Już w CTI: {len(result['already_in_cti'])}")
+        if result['cti_resolved']:
+            lines.append(f"❓ Do weryfikacji (może rozwiązane): {len(result['cti_resolved'])}")
+        
+        result['summary'] = "\n".join(lines) if lines else "Brak różnic."
+        
+        return result
+    
+    # ========== CTI Deep Integration - U3: Smart Substitutes ==========
+    
+    def get_smart_substitutes(self, product_id: int, required_qty: float = 0,
+                               warehouse_ids: list = None) -> pd.DataFrame:
+        """
+        [U3] Enhanced substitute lookup with stock availability.
+        Returns substitutes sorted by best availability to cover shortage.
+        
+        Args:
+            product_id: Original ingredient ID
+            required_qty: How much is needed (for coverage calculation)
+            warehouse_ids: Optional warehouse filter for stock
+            
+        Returns:
+            DataFrame with columns:
+            - SubstituteId, SubstituteCode, SubstituteName
+            - IsAllowed (1 = can use, 0 = cannot)
+            - CurrentStock
+            - Coverage (how much of required_qty can be covered)
+            - Recommendation (text)
+        """
+        warehouse_filter = ""
+        if warehouse_ids:
+            warehouse_list = ",".join(map(str, warehouse_ids))
+            warehouse_filter = f" AND z.TwZ_MagId IN ({warehouse_list})"
+        
+        query = f"""
+        SELECT 
+            zam.CTM_ZamID AS SubstituteId,
+            t.Twr_Kod AS SubstituteCode,
+            t.Twr_Nazwa AS SubstituteName,
+            zam.CTM_Dozwolony AS IsAllowed,
+            zam.CTM_Typ AS SubstituteType,
+            ISNULL(SUM(z.TwZ_Ilosc), 0) AS CurrentStock,
+            t.Twr_JM AS Unit
+        FROM dbo.CtiTechnolZamienniki zam
+        LEFT JOIN CDN.Towary t ON zam.CTM_ZamID = t.Twr_TwrId
+        LEFT JOIN CDN.TwrZasoby z ON zam.CTM_ZamID = z.TwZ_TwrId{warehouse_filter}
+        WHERE zam.CTM_TwrID = :product_id
+        GROUP BY zam.CTM_ZamID, t.Twr_Kod, t.Twr_Nazwa, zam.CTM_Dozwolony, zam.CTM_Typ, t.Twr_JM
+        ORDER BY zam.CTM_Dozwolony DESC, CurrentStock DESC
+        """
+        
+        df = self.execute_query(query, params={"product_id": product_id},
+                               query_name=f"get_smart_substitutes({product_id})")
+        
+        if not df.empty and required_qty > 0:
+            # Calculate coverage percentage
+            df['Coverage'] = (df['CurrentStock'] / required_qty * 100).clip(upper=100).round(1)
+            
+            # Generate recommendations
+            def get_recommendation(row):
+                if row['IsAllowed'] == 0:
+                    return "⛔ Niedozwolony"
+                elif row['CurrentStock'] >= required_qty:
+                    return "✅ Pełna zamiana możliwa"
+                elif row['CurrentStock'] > 0:
+                    return f"⚠️ Częściowo ({row['Coverage']:.0f}%)"
+                else:
+                    return "❌ Brak na stanie"
+            
+            df['Recommendation'] = df.apply(get_recommendation, axis=1)
+        
+        return df
+    
+    # ========== CTI Deep Integration - U4: Dashboard Stats ==========
+    
+    def get_production_dashboard_stats(self, date_from: str = None, 
+                                        date_to: str = None) -> dict:
+        """
+        [U4] Aggregated statistics for production dashboard.
+        Combines multiple CTI tables for a comprehensive overview.
+        
+        Args:
+            date_from: Optional start date filter (YYYY-MM-DD)
+            date_to: Optional end date filter (YYYY-MM-DD)
+            
+        Returns:
+            dict with keys:
+            - orders: {total, by_status}
+            - shortages: {active_docs, total_items}
+            - technologies: {total, active}
+            - resources: {total, by_department}
+        """
+        import datetime
+        
+        if not date_from:
+            date_from = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
+        if not date_to:
+            date_to = datetime.datetime.now().strftime('%Y-%m-%d')
+        
+        result = {
+            'orders': {'total': 0, 'by_status': {}},
+            'shortages': {'active_docs': 0, 'total_items': 0},
+            'technologies': {'total': 0, 'active': 0},
+            'resources': {'total': 0, 'by_department': {}},
+            'period': {'from': date_from, 'to': date_to}
+        }
+        
+        # Orders by status
+        try:
+            q_orders = f"""
+            SELECT 
+                ISNULL(cs.CS_StatusNazwa, 'Brak statusu') AS StatusName,
+                COUNT(*) AS Count
+            FROM dbo.CtiZlecenieNag zn WITH (NOLOCK)
+            LEFT JOIN dbo.CtiStatusy cs ON zn.CZN_Status = cs.CS_StatusNr AND cs.CS_Typ = 1
+            WHERE zn.CZN_DataWystaw BETWEEN '{date_from}' AND '{date_to}'
+            GROUP BY cs.CS_StatusNazwa
+            """
+            df_orders = self.execute_query(q_orders, query_name="dashboard_orders")
+            if not df_orders.empty:
+                result['orders']['total'] = int(df_orders['Count'].sum())
+                result['orders']['by_status'] = dict(zip(df_orders['StatusName'], df_orders['Count']))
+        except Exception as e:
+            logger.debug(f"Dashboard orders error: {e}")
+        
+        # Shortages
+        try:
+            q_shortages = """
+            SELECT 
+                COUNT(DISTINCT bn.CBN_ID) AS DocCount,
+                COUNT(*) AS ItemCount
+            FROM dbo.CtiBrakiNag bn
+            JOIN dbo.CtiBrakiElem be ON bn.CBN_ID = be.CBE_CBNId
+            WHERE bn.CBN_Status = 0
+            """
+            df_short = self.execute_query(q_shortages, query_name="dashboard_shortages")
+            if not df_short.empty:
+                result['shortages']['active_docs'] = int(df_short['DocCount'].iloc[0] or 0)
+                result['shortages']['total_items'] = int(df_short['ItemCount'].iloc[0] or 0)
+        except Exception as e:
+            logger.debug(f"Dashboard shortages error: {e}")
+        
+        # Technologies
+        try:
+            q_tech = """
+            SELECT 
+                COUNT(*) AS Total,
+                SUM(CASE WHEN CTN_Status = 1 THEN 1 ELSE 0 END) AS Active
+            FROM dbo.CtiTechnolNag
+            """
+            df_tech = self.execute_query(q_tech, query_name="dashboard_tech")
+            if not df_tech.empty:
+                result['technologies']['total'] = int(df_tech['Total'].iloc[0] or 0)
+                result['technologies']['active'] = int(df_tech['Active'].iloc[0] or 0)
+        except Exception as e:
+            logger.debug(f"Dashboard technologies error: {e}")
+        
+        # Resources by department
+        try:
+            q_resources = """
+            SELECT 
+                d.CDZ_Kod AS Department,
+                COUNT(*) AS ResourceCount
+            FROM dbo.CtiZasob z
+            LEFT JOIN dbo.CtiDzial d ON z.CZ_DzialID = d.CDZ_ID
+            GROUP BY d.CDZ_Kod
+            """
+            df_res = self.execute_query(q_resources, query_name="dashboard_resources")
+            if not df_res.empty:
+                result['resources']['total'] = int(df_res['ResourceCount'].sum())
+                result['resources']['by_department'] = dict(zip(
+                    df_res['Department'].fillna('Brak').tolist(), 
+                    df_res['ResourceCount'].tolist()
+                ))
+        except Exception as e:
+            logger.debug(f"Dashboard resources error: {e}")
+        
+        return result
+    
+    # ========== CTI Deep Integration - U5: Completions History ==========
+    
+    def get_completions_history(self, order_id: int = None, 
+                                 limit: int = 100) -> pd.DataFrame:
+        """
+        [U5] Fetches completion records from CtiKompletacja tables.
+        Shows what products were assembled and what materials were used.
+        
+        Args:
+            order_id: Optional filter by production order (ZP) ID
+            limit: Maximum records to return (default 100)
+            
+        Returns:
+            DataFrame with completion details:
+            - CompletionId, OrderId, CreatedDate
+            - ProductCode, ProductName, ProductQty
+            - IngredientCode, IngredientName, UsedQty
+        """
+        order_filter = ""
+        params = {}
+        if order_id is not None:
+            order_filter = "AND kn.KPN_ZPID = :order_id"
+            params["order_id"] = order_id
+        
+        query = f"""
+        SELECT TOP {int(limit)}
+            kn.KPN_ID AS CompletionId,
+            kn.KPN_ZPID AS OrderId,
+            kn.KPN_DataUtworzenia AS CreatedDate,
+            kw.KPW_TwrKod AS ProductCode,
+            kw.KPW_TwrNazwa AS ProductName,
+            kw.KPW_IloscWyrobu AS ProductQty,
+            ks.KPS_TwrKod AS IngredientCode,
+            ks.KPS_TwrNazwa AS IngredientName,
+            ks.KPS_IloscSurowca AS UsedQty,
+            zn.CZN_NrPelny AS OrderNumber
+        FROM dbo.CtiKompletacjaNag kn
+        JOIN dbo.CtiKompletacjaWyrob kw ON kn.KPN_ID = kw.KPW_KPNID
+        JOIN dbo.CtiKompletacjaSurowiec ks ON kw.KPW_ID = ks.KPS_KPWID
+        LEFT JOIN dbo.CtiZlecenieNag zn ON kn.KPN_ZPID = zn.CZN_ID
+        WHERE 1=1 {order_filter}
+        ORDER BY kn.KPN_DataUtworzenia DESC
+        """
+        
+        return self.execute_query(query, params=params if params else None,
+                                 query_name="get_completions_history")
+    
+    def get_completion_summary(self, product_id: int = None) -> pd.DataFrame:
+        """
+        [U5 Extension] Aggregated completion statistics per product.
+        
+        Args:
+            product_id: Optional filter by product ID
+            
+        Returns:
+            DataFrame with: ProductCode, TotalProduced, TotalCompletions, AvgBatchSize
+        """
+        product_filter = ""
+        if product_id:
+            product_filter = f"AND kw.KPW_TwrID = {int(product_id)}"
+        
+        query = f"""
+        SELECT 
+            kw.KPW_TwrKod AS ProductCode,
+            kw.KPW_TwrNazwa AS ProductName,
+            SUM(kw.KPW_IloscWyrobu) AS TotalProduced,
+            COUNT(DISTINCT kn.KPN_ID) AS TotalCompletions,
+            AVG(kw.KPW_IloscWyrobu) AS AvgBatchSize
+        FROM dbo.CtiKompletacjaNag kn
+        JOIN dbo.CtiKompletacjaWyrob kw ON kn.KPN_ID = kw.KPW_KPNID
+        WHERE 1=1 {product_filter}
+        GROUP BY kw.KPW_TwrKod, kw.KPW_TwrNazwa
+        ORDER BY TotalProduced DESC
+        """
+        
+        return self.execute_query(query, query_name="get_completion_summary")
+    
+    # ========== CTI Deep Integration - U6: CTI Attributes ==========
+    
+    def get_product_cti_attributes(self, product_id: int = None,
+                                    doc_type: int = 1) -> pd.DataFrame:
+        """
+        [U6] Fetches CTI-specific attributes from CtiAtrybutyElem.
+        These are custom attributes defined in CTI Production, not CDN attributes.
+        
+        Args:
+            product_id: Optional product ID to filter
+            doc_type: Document type (1=product, 6=ZP order, etc.)
+            
+        Returns:
+            DataFrame with columns:
+            - ProductId (or DocId)
+            - AttributeName, AttributeValue, AttributeType
+        """
+        product_filter = ""
+        params = {"doc_type": doc_type}
+        if product_id is not None:
+            product_filter = "AND cae.CAE_IdDok = :product_id"
+            params["product_id"] = product_id
+        
+        query = f"""
+        SELECT 
+            cae.CAE_IdDok AS DocId,
+            cae.CAE_TypDok AS DocType,
+            can.CAN_Lp AS AttrOrder,
+            can.CAN_Nazwa AS AttributeName,
+            cae.CAE_Wartosc AS AttributeValue,
+            can.CAN_Typ AS AttributeType,
+            can.CAN_Opis AS AttributeDescription
+        FROM dbo.CtiAtrybutyElem cae
+        JOIN dbo.CtiAtrybutyNag can ON cae.CAE_CANLp = can.CAN_Lp
+        WHERE cae.CAE_TypDok = :doc_type
+        {product_filter}
+        ORDER BY cae.CAE_IdDok, can.CAN_Lp
+        """
+        
+        return self.execute_query(query, params=params,
+                                 query_name="get_product_cti_attributes")
+    
+    def get_available_cti_attributes(self) -> pd.DataFrame:
+        """
+        [U6 Extension] Lists all available CTI attribute definitions.
+        
+        Returns:
+            DataFrame with all attribute definitions from CtiAtrybutyNag
+        """
+        query = """
+        SELECT 
+            CAN_Lp AS AttrOrder,
+            CAN_Nazwa AS AttributeName,
+            CAN_Typ AS AttributeType,
+            CAN_Domysla AS DefaultValue,
+            CAN_Opis AS Description,
+            CAN_Panel AS ShowInPanel
+        FROM dbo.CtiAtrybutyNag
+        ORDER BY CAN_Lp
+        """
+        
+        return self.execute_query(query, query_name="get_available_cti_attributes")
 
 

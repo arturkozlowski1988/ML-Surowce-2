@@ -170,6 +170,7 @@ class MRPSimulator:
         limiting_idx = df_bom['MaxProducible'].idxmin()
         limiting_row = df_bom.loc[limiting_idx]
         limiting_factor = {
+            'ingredient_id': limiting_row.get('IngredientId') if 'IngredientId' in df_bom.columns else None,
             'ingredient_code': limiting_row['IngredientCode'],
             'ingredient_name': limiting_row['IngredientName'],
             'current_stock': limiting_row['CurrentStock'],
@@ -373,6 +374,7 @@ class MRPSimulator:
         limiting_idx = df_bom['MaxProducible'].idxmin()
         limiting_row = df_bom.loc[limiting_idx]
         limiting_factor = {
+            'ingredient_id': limiting_row.get('IngredientId') if 'IngredientId' in df_bom.columns else None,
             'ingredient_code': limiting_row['IngredientCode'],
             'ingredient_name': limiting_row['IngredientName'],
             'current_stock': limiting_row['CurrentStock'],
@@ -603,6 +605,9 @@ class MRPSimulator:
         - Delivery times
         - Substitutes suggestions
         - CTI shortage sync
+        - [U1] Production status from CtiProdukcjaStatus
+        - [U2] CTI shortage comparison
+        - [U3] Smart substitutes with stock
         
         This is the main method for AI Assistant integration.
         
@@ -631,6 +636,35 @@ class MRPSimulator:
             ""
         ])
         
+        # [U1] Production status integration
+        try:
+            production_status = self.db.get_production_status(use_cache=True)
+            if not production_status.empty:
+                # Get summary stats
+                total_orders = len(production_status)
+                completed = len(production_status[production_status['RealizationStatus'] == 'ZAKOŃCZONE'])
+                in_progress = len(production_status[production_status['RealizationStatus'] == 'W REALIZACJI'])
+                not_started = total_orders - completed - in_progress
+                
+                lines.extend([
+                    "## 1b. Status Zleceń (CTI CtiProdukcjaStatus)",
+                    f"- **Aktywne zlecenia:** {total_orders}",
+                    f"- **Zakończone:** {completed} | **W realizacji:** {in_progress} | **Nie rozpoczęte:** {not_started}",
+                    ""
+                ])
+                
+                # Get pending demand for BOM items
+                bom_products = [item.get('ingredient_id') for item in result.get('bom', []) if item.get('ingredient_id')]
+                if bom_products:
+                    pending = self.db.get_active_orders_demand(bom_products)
+                    if not pending.empty:
+                        lines.append("**Rezerwacja surowców przez aktywne ZP:**")
+                        for _, row in pending.head(5).iterrows():
+                            lines.append(f"- {row['IngredientCode']}: {row['PendingDemand']:.2f} (z {row['ActiveOrderCount']} zleceń)")
+                        lines.append("")
+        except Exception as e:
+            logger.debug(f"Could not get production status: {e}")
+        
         # 2. Limiting factor
         if result['limiting_factor'] and not result['can_produce']:
             lf = result['limiting_factor']
@@ -642,8 +676,26 @@ class MRPSimulator:
                 f"- **Czas dostawy:** {lf.get('delivery_time_days', 0)} dni",
                 ""
             ])
+            
+            # [U3] Smart substitutes for limiting factor
+            try:
+                shortage_qty = lf['quantity_required'] - lf['current_stock']
+                if lf.get('ingredient_id'):
+                    smart_subs = self.db.get_smart_substitutes(
+                        lf['ingredient_id'], 
+                        shortage_qty,
+                        warehouse_ids
+                    )
+                    if not smart_subs.empty:
+                        lines.append("**Zamienniki dla czynnika ograniczającego:**")
+                        for _, sub in smart_subs[smart_subs['IsAllowed'] == 1].head(3).iterrows():
+                            lines.append(f"- {sub['SubstituteCode']}: {sub['CurrentStock']:.2f} {sub.get('Unit', 'szt.')} - {sub.get('Recommendation', '')}")
+                        lines.append("")
+            except Exception as e:
+                logger.debug(f"Could not get smart substitutes: {e}")
         
         # 3. Shortages with substitutes
+        subs_result = {}
         if result['shortages']:
             subs_result = self.get_shortage_with_substitutes(product_id, quantity, warehouse_ids)
             
@@ -660,15 +712,33 @@ class MRPSimulator:
             
             lines.append("")
         
-        # 4. CTI Sync info
+        # [U2] CTI Sync with comparison
         cti_shortages = self.sync_with_cti_shortages()
-        if not cti_shortages.empty:
+        if not cti_shortages.empty or result['shortages']:
             lines.extend([
-                "## 4. Dokumenty Braków (CTI)",
-                f"- **Aktywne dokumenty BR:** {len(cti_shortages['ShortageDocNumber'].unique()) if 'ShortageDocNumber' in cti_shortages.columns else 0}",
-                f"- **Łącznie pozycji:** {len(cti_shortages)}",
-                ""
+                "## 4. Synchronizacja z CTI Braki",
             ])
+            
+            # Compare calculated shortages with CTI
+            try:
+                if result['shortages']:
+                    import pandas as pd
+                    shortages_df = pd.DataFrame(result['shortages'])
+                    if 'IngredientId' not in shortages_df.columns and 'ingredient_id' in shortages_df.columns:
+                        shortages_df['IngredientId'] = shortages_df['ingredient_id']
+                    
+                    comparison = self.db.compare_with_cti_shortages(shortages_df)
+                    lines.append(comparison['summary'])
+                    lines.append("")
+            except Exception as e:
+                logger.debug(f"Could not compare with CTI: {e}")
+            
+            if not cti_shortages.empty:
+                lines.extend([
+                    f"- **Aktywne dokumenty BR:** {len(cti_shortages['ShortageDocNumber'].unique()) if 'ShortageDocNumber' in cti_shortages.columns else 0}",
+                    f"- **Łącznie pozycji:** {len(cti_shortages)}",
+                    ""
+                ])
         
         # 5. Recommendations
         lines.extend([
@@ -686,5 +756,188 @@ class MRPSimulator:
                 lines.append("3. 🔄 Rozważyć użycie zamienników (jeśli dostępne)")
         
         return "\n".join(lines)
+    
+    # ========== LLM Integration ==========
+    
+    def analyze_with_llm(
+        self, 
+        product_id: int, 
+        quantity: float,
+        warehouse_ids: List[int] = None,
+        llm_engine = None
+    ) -> dict:
+        """
+        Performs MRP analysis and generates AI recommendations using Local LLM.
+        
+        This method:
+        1. Runs comprehensive production analysis (U1-U3 integrated)
+        2. Generates context string for LLM
+        3. Calls Local LLM for intelligent recommendations
+        
+        Args:
+            product_id: ID of the product to analyze
+            quantity: Target production quantity
+            warehouse_ids: Optional warehouse filter
+            llm_engine: LocalLLMEngine instance (if None, creates one)
+            
+        Returns:
+            dict with keys:
+            - 'analysis': Comprehensive analysis markdown
+            - 'llm_recommendation': AI-generated recommendation text
+            - 'llm_available': Whether LLM was used
+            - 'simulation_result': Raw simulation result
+        """
+        logger.info(f"Starting LLM-enhanced analysis for product {product_id}, qty {quantity}")
+        
+        # 1. Run comprehensive analysis
+        analysis_markdown = self.get_comprehensive_production_analysis(
+            product_id, quantity, warehouse_ids
+        )
+        
+        # 2. Get simulation result for additional context
+        simulation = self.simulate_production_with_delivery(
+            product_id, quantity, warehouse_ids
+        )
+        
+        result = {
+            'analysis': analysis_markdown,
+            'llm_recommendation': '',
+            'llm_available': False,
+            'simulation_result': simulation
+        }
+        
+        # 3. Try to use LLM for recommendations
+        if llm_engine is None:
+            try:
+                from src.ai_engine.local_llm import LocalLLMEngine, check_local_llm_available
+                
+                available, msg = check_local_llm_available()
+                if available:
+                    llm_engine = LocalLLMEngine()
+                    logger.info(f"Local LLM available: {msg}")
+                else:
+                    logger.info(f"Local LLM not available: {msg}")
+                    result['llm_recommendation'] = f"LLM niedostępne: {msg}"
+                    return result
+            except Exception as e:
+                logger.warning(f"Could not initialize Local LLM: {e}")
+                result['llm_recommendation'] = f"Błąd inicjalizacji LLM: {e}"
+                return result
+        
+        # 4. Generate prompt for LLM
+        prompt = self._generate_llm_prompt(product_id, quantity, simulation, analysis_markdown)
+        
+        # 5. Get LLM response
+        try:
+            llm_response = llm_engine.generate_explanation(prompt)
+            result['llm_recommendation'] = llm_response
+            result['llm_available'] = True
+            logger.info("LLM recommendation generated successfully")
+        except Exception as e:
+            logger.error(f"LLM generation failed: {e}")
+            result['llm_recommendation'] = f"Błąd generowania rekomendacji: {e}"
+        
+        return result
+    
+    def _generate_llm_prompt(
+        self, 
+        product_id: int, 
+        quantity: float, 
+        simulation: dict,
+        analysis_markdown: str
+    ) -> str:
+        """
+        Generates a structured prompt for the LLM based on MRP analysis.
+        """
+        # Extract key info
+        can_produce = simulation.get('can_produce', False)
+        max_producible = simulation.get('max_producible', 0)
+        shortages = simulation.get('shortages', [])
+        delivery_time = simulation.get('max_delivery_time', 0)
+        limiting = simulation.get('limiting_factor', {})
+        
+        # Build prompt
+        prompt_lines = [
+            f"Jako ekspert ds. zakupów i planowania produkcji, przeanalizuj następującą sytuację:",
+            "",
+            f"## Dane Wejściowe",
+            f"- Produkt do wyprodukowania: ID {product_id}",
+            f"- Ilość docelowa: {quantity} szt.",
+            f"- Możliwość realizacji: {'TAK' if can_produce else 'NIE'}",
+            f"- Maksymalna ilość możliwa: {max_producible:.0f} szt.",
+        ]
+        
+        if shortages:
+            prompt_lines.extend([
+                "",
+                f"## Braki Surowców ({len(shortages)} pozycji)",
+            ])
+            for s in shortages[:5]:
+                code = s.get('IngredientCode', '?')
+                shortage_qty = abs(s.get('Shortage', 0))
+                prompt_lines.append(f"- {code}: brakuje {shortage_qty:.2f}")
+        
+        if limiting:
+            prompt_lines.extend([
+                "",
+                f"## Czynnik Ograniczający",
+                f"- Surowiec: {limiting.get('ingredient_name', '?')} ({limiting.get('ingredient_code', '?')})",
+                f"- Stan: {limiting.get('current_stock', 0):.2f}, Potrzeba: {limiting.get('quantity_required', 0):.2f}",
+            ])
+        
+        if delivery_time > 0:
+            prompt_lines.extend([
+                "",
+                f"## Czas Dostawy",
+                f"- Maksymalny czas dostawy: {delivery_time} dni",
+                f"- Data rozpoczęcia produkcji: {simulation.get('earliest_production_date', 'Nieznana')}",
+            ])
+        
+        prompt_lines.extend([
+            "",
+            "## Zadanie",
+            "Na podstawie powyższych danych:",
+            "1. Oceń sytuację i priorytet działań",
+            "2. Zaproponuj konkretne kroki dla działu zakupów",
+            "3. Wskaż ryzyka i alternatywy (np. zamienniki)",
+            "",
+            "Odpowiedź sformułuj w języku polskim, używając punktów i konkretnych liczb.",
+        ])
+        
+        return "\n".join(prompt_lines)
+    
+    def get_analysis_with_llm_response(
+        self, 
+        product_id: int, 
+        quantity: float,
+        warehouse_ids: List[int] = None,
+        llm_engine = None
+    ) -> str:
+        """
+        Convenience method that returns combined analysis + LLM recommendation as markdown.
+        
+        Returns:
+            Formatted markdown string with analysis and AI recommendation
+        """
+        result = self.analyze_with_llm(product_id, quantity, warehouse_ids, llm_engine)
+        
+        output_lines = [result['analysis']]
+        
+        if result['llm_available'] and result['llm_recommendation']:
+            output_lines.extend([
+                "",
+                "---",
+                "",
+                "## 🤖 Rekomendacja AI (Local LLM)",
+                "",
+                result['llm_recommendation'],
+            ])
+        elif result['llm_recommendation']:
+            output_lines.extend([
+                "",
+                f"*Uwaga: {result['llm_recommendation']}*",
+            ])
+        
+        return "\n".join(output_lines)
 
 
