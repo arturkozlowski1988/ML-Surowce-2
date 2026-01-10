@@ -13,4 +13,6 @@ llama-cpp-python>=0.2.0
 pyinstaller>=6.0.0
 cryptography>=41.0.0
 bcrypt>=4.0.0
+tensorflow>=2.15.0
+holidays>=0.40
 

@@ -1,5 +1,60 @@
 # Changelog
 
+## [1.5.0] - 2026-01-10
+
+### Added
+
+- **🧠 LSTM Deep Learning Model**:
+  - Nowy model sieci neuronowej dla prognozowania szeregów czasowych
+  - Obsługa wielowarstwowej architektury LSTM z dropout
+  - Automatyczne skalowanie danych (MinMaxScaler)
+  - Rekursywna predykcja dla dowolnego horyzontu
+  - Wymaga TensorFlow >= 2.15.0
+
+- **📊 Metryki jakości prognoz**:
+  - MAPE (Mean Absolute Percentage Error) - średni % błędu
+  - RMSE (Root Mean Squared Error) - pierwiastek błędu średniokwadratowego
+  - MAE (Mean Absolute Error) - średni błąd bezwzględny
+  - R² (Coefficient of Determination) - współczynnik determinacji
+  - Wyświetlanie metryk w widoku Predykcja
+
+- **💾 Model Persistence (Zapis/Odczyt modeli)**:
+  - `src/models/model_manager.py` - nowy moduł do zarządzania modelami
+  - Zapisywanie modeli sklearn z joblib
+  - Zapisywanie modeli TensorFlow/Keras
+  - Metadane modeli w JSON (metryki, hiperparametry, data treningu)
+  - Katalog `saved_models/` dla zapisanych modeli
+
+- **⚙️ Panel Konfiguracji ML (Admin)**:
+  - Nowa zakładka "⚙️ Konfiguracja ML" w Panelu Admina
+  - Slidery dla Random Forest: liczba drzew, głębokość, min. próbek
+  - Slidery dla Gradient Boosting: learning rate, estymatory, głębokość
+  - Slidery dla LSTM: neurony, epoki, dropout, okno historyczne
+  - Zapis konfiguracji do `config/ml_config.json`
+  - Przycisk resetowania do ustawień domyślnych
+
+- **🔧 Konfigurowalny ML Pipeline**:
+  - `src/ml_config.py` - nowy moduł konfiguracji hiperparametrów
+  - Dataclasses dla RandomForestConfig, GradientBoostingConfig, LSTMConfig
+  - Walidacja krzyżowa (opcjonalna)
+  - Business-friendly opisy parametrów w języku polskim
+
+### Changed
+
+- `src/forecasting.py` - rozszerzony o LSTM, metryki, konfigurowalność
+- `src/viewmodels/prediction_viewmodel.py` - dodany LSTM do ModelType enum
+- `src/gui/views/prediction.py` - wyświetlanie MAPE/RMSE/MAE/R², opcja LSTM
+- `src/gui/views/admin_view.py` - nowa zakładka Konfiguracja ML (9 zakładek)
+- `requirements.txt` - dodane: tensorflow>=2.15.0, holidays>=0.40
+
+### Testing
+
+- Nowy plik testowy: `scripts/test_ml_enhancements.py`
+- 21 testów pokrywających wszystkie nowe funkcjonalności
+- Testy: persistence, config, metryki, cross-validation, LSTM
+
+---
+
 ## [1.4.1] - 2026-01-05
 
 ### Added

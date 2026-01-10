@@ -82,7 +82,8 @@ def render_prediction_view(
             [
                 ("Random Forest (Zbalansowany)", ModelType.RANDOM_FOREST),
                 ("Gradient Boosting (Wysoka Precyzja)", ModelType.GRADIENT_BOOSTING),
-                ("Exponential Smoothing (Trend/Sezonowość)", ModelType.EXPONENTIAL_SMOOTHING)
+                ("Exponential Smoothing (Trend/Sezonowość)", ModelType.EXPONENTIAL_SMOOTHING),
+                ("🧠 LSTM Deep Learning (Zaawansowany)", ModelType.LSTM)
             ],
             format_func=lambda x: x[0]
         )
@@ -192,54 +193,68 @@ def _render_forecast_chart(chart_df: pd.DataFrame, product_id: int, product_map:
             "Forecast (Baseline)": "gray",
             "Forecast (Random Forest)": "orange",
             "Forecast (Gradient Boosting)": "darkgreen",
-            "Forecast (Exponential Smoothing)": "purple"
+            "Forecast (Exponential Smoothing)": "purple",
+            "Forecast (LSTM (Deep Learning))": "crimson"
         }
     )
     st.plotly_chart(fig, use_container_width=True)
 
 
 def _render_model_metrics(result: ModelResult):
-    """Render model performance metrics."""
+    """Render model performance metrics with MAPE, RMSE, MAE, R²."""
     if result.metrics:
-        cols = st.columns(3)
+        # Show 4 metrics in responsive columns
+        cols = st.columns(4)
         
-        metrics_display = {
-            'mae': ('MAE', 'Średni błąd bezwzględny'),
-            'rmse': ('RMSE', 'Pierwiastek błędu średniokwadratowego'),
-            'training_time_ms': ('Czas treningu', 'Czas trenowania modelu')
-        }
+        metrics_display = [
+            ('mape', 'MAPE', 'Średni % błędu prognozy', '%'),
+            ('rmse', 'RMSE', 'Pierwiastek błędu średniokwadratowego', ''),
+            ('mae', 'MAE', 'Średni błąd bezwzględny', ''),
+            ('r2', 'R²', 'Współczynnik determinacji (1.0 = idealny)', '')
+        ]
         
-        for i, (key, (label, help_text)) in enumerate(metrics_display.items()):
+        for i, (key, label, help_text, suffix) in enumerate(metrics_display):
             if key in result.metrics:
                 value = result.metrics[key]
-                if key == 'training_time_ms':
-                    cols[i].metric(label, f"{value:.0f} ms", help=help_text)
+                if suffix == '%':
+                    cols[i].metric(label, f"{value:.1f}%", help=help_text)
+                elif key == 'r2':
+                    cols[i].metric(label, f"{value:.3f}", help=help_text)
                 else:
                     cols[i].metric(label, f"{value:.2f}", help=help_text)
+        
+        # Training time in expander
+        if result.training_time_ms > 0:
+            st.caption(f"⏱️ Czas treningu: {result.training_time_ms:.0f} ms")
 
 
 def _render_model_info(model_type: ModelType):
     """Render model explanation with performance tips."""
     info_map = {
         ModelType.RANDOM_FOREST: (
-            "**Random Forest**: Ensemble drzew decyzyjnych. "
+            "**🌲 Random Forest**: Ensemble drzew decyzyjnych. "
             "Dobry balans między dopasowaniem a generalizacją. "
             "⚡ Szybki w treningu."
         ),
         ModelType.GRADIENT_BOOSTING: (
-            "**Gradient Boosting**: Uczy się na błędach poprzedników. "
+            "**📈 Gradient Boosting**: Uczy się na błędach poprzedników. "
             "Często dokładniejszy, ale wolniejszy. "
             "⏱️ Może wymagać więcej czasu."
         ),
         ModelType.EXPONENTIAL_SMOOTHING: (
-            "**Exponential Smoothing (Holt-Winters)**: Modeluje trend i sezonowość bezpośrednio. "
+            "**📉 Exponential Smoothing (Holt-Winters)**: Modeluje trend i sezonowość bezpośrednio. "
             "Dobry dla stabilnych wzorców. "
             "📊 Najlepszy dla danych z wyraźną sezonowością."
         ),
         ModelType.BASELINE: (
-            "**Baseline (SMA-4)**: Prosta średnia krocząca z ostatnich 4 tygodni. "
+            "**📏 Baseline (SMA-4)**: Prosta średnia krocząca z ostatnich 4 tygodni. "
             "Punkt odniesienia do porównań. "
             "📏 Szybki i prosty."
+        ),
+        ModelType.LSTM: (
+            "**🧠 LSTM (Deep Learning)**: Sieć neuronowa z pamięcią długoterminową. "
+            "Rozpoznaje złożone wzorce w danych. "
+            "⏳ Dłuższy trening, potencjalnie najwyższa dokładność."
         )
     }
     st.info(info_map.get(model_type, ""))

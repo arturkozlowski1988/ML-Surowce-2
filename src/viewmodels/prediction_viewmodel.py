@@ -22,6 +22,7 @@ class ModelType(Enum):
     RANDOM_FOREST = "rf"
     GRADIENT_BOOSTING = "gb"
     EXPONENTIAL_SMOOTHING = "es"
+    LSTM = "lstm"  # Deep Learning
 
 
 @dataclass
@@ -71,7 +72,8 @@ class PredictionViewModel(BaseViewModel):
         ModelType.BASELINE: "Baseline (SMA-4)",
         ModelType.RANDOM_FOREST: "Random Forest",
         ModelType.GRADIENT_BOOSTING: "Gradient Boosting",
-        ModelType.EXPONENTIAL_SMOOTHING: "Exponential Smoothing"
+        ModelType.EXPONENTIAL_SMOOTHING: "Exponential Smoothing",
+        ModelType.LSTM: "LSTM (Deep Learning)"
     }
     
     def __init__(self, db, forecaster, prepare_time_series, fill_missing_weeks):

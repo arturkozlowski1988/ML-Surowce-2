@@ -40,6 +40,7 @@ def render_admin_view():
         "📊 Dashboard",
         "👥 Użytkownicy",
         "🤖 Ustawienia LLM",
+        "⚙️ Konfiguracja ML",
         "🗄️ Uprawnienia Baz",
         "🔔 Alerty",
         "📝 Edycja Promptów",
@@ -57,18 +58,21 @@ def render_admin_view():
         _render_llm_settings_tab()
     
     with tabs[3]:
-        _render_database_permissions_tab()
+        _render_ml_config_tab()
     
     with tabs[4]:
-        _render_alerts_tab()
+        _render_database_permissions_tab()
     
     with tabs[5]:
-        _render_prompts_tab()
+        _render_alerts_tab()
     
     with tabs[6]:
-        _render_audit_tab()
+        _render_prompts_tab()
     
     with tabs[7]:
+        _render_audit_tab()
+    
+    with tabs[8]:
         _render_system_settings_tab()
 
 
@@ -293,6 +297,204 @@ def _render_delete_user_form(auth, users, current_username):
                     st.rerun()
                 else:
                     st.error("❌ Nie można usunąć ostatniego administratora")
+
+
+# =============================================================================
+# ML CONFIGURATION TAB
+# =============================================================================
+
+def _render_ml_config_tab():
+    """
+    Renders ML hyperparameter configuration tab.
+    Allows administrators to tune ML model parameters.
+    """
+    try:
+        from src.ml_config import load_config, save_config, MLConfig, reset_to_defaults
+        from src.forecasting import Forecaster
+    except ImportError as e:
+        st.error(f"Nie można załadować modułu ml_config: {e}")
+        return
+    
+    st.markdown("### ⚙️ Konfiguracja Modeli ML")
+    st.info("""
+    **Tuning hiperparametrów** - dostosuj parametry modeli uczenia maszynowego.
+    Zmiany wpływają na dokładność i czas treningu prognoz.
+    """)
+    
+    config = load_config()
+    
+    with st.form("ml_config_form"):
+        # Random Forest
+        st.markdown("---")
+        st.markdown("### 🌲 Random Forest")
+        st.caption("Ensemble drzew decyzyjnych - dobry balans dokładności i szybkości.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            rf_n_estimators = st.slider(
+                "Liczba drzew",
+                min_value=10, max_value=500, value=config.random_forest.n_estimators, step=10,
+                help="Więcej drzew = lepsza dokładność, dłuższy trening"
+            )
+            rf_max_depth = st.slider(
+                "Maksymalna głębokość",
+                min_value=1, max_value=50, value=config.random_forest.max_depth or 20,
+                help="Ogranicza złożoność drzewa, zapobiega przeuczeniu"
+            )
+        with col2:
+            rf_min_samples_split = st.slider(
+                "Min próbek do podziału",
+                min_value=2, max_value=20, value=config.random_forest.min_samples_split,
+                help="Wyższa wartość = prostszy, bardziej uogólniony model"
+            )
+            rf_min_samples_leaf = st.slider(
+                "Min próbek w liściu",
+                min_value=1, max_value=10, value=config.random_forest.min_samples_leaf,
+                help="Zapobiega tworzeniu zbyt szczegółowych reguł"
+            )
+        
+        # Gradient Boosting
+        st.markdown("---")
+        st.markdown("### 📈 Gradient Boosting")
+        st.caption("Sekwencyjne uczenie na błędach - często najdokładniejszy.")
+        
+        col3, col4 = st.columns(2)
+        with col3:
+            gb_n_estimators = st.slider(
+                "Liczba estymatorów",
+                min_value=10, max_value=500, value=config.gradient_boosting.n_estimators, step=10,
+                help="Więcej etapów = lepsza dokładność, dłuższy trening",
+                key="gb_n_est"
+            )
+            gb_learning_rate = st.slider(
+                "Współczynnik uczenia",
+                min_value=0.01, max_value=1.0, value=config.gradient_boosting.learning_rate, step=0.01,
+                help="Niższy = stabilniejsze wyniki, wymaga więcej estymatorów"
+            )
+        with col4:
+            gb_max_depth = st.slider(
+                "Głębokość drzewa",
+                min_value=1, max_value=10, value=config.gradient_boosting.max_depth,
+                help="Zalecane 3-5 dla gradient boosting",
+                key="gb_depth"
+            )
+            gb_subsample = st.slider(
+                "Frakcja próbkowania",
+                min_value=0.5, max_value=1.0, value=config.gradient_boosting.subsample, step=0.1,
+                help="Mniej niż 1.0 = stochastyczny gradient boosting"
+            )
+        
+        # LSTM Deep Learning
+        st.markdown("---")
+        st.markdown("### 🧠 LSTM (Deep Learning)")
+        
+        # Check if TensorFlow is available
+        lstm_available = Forecaster.is_lstm_available()
+        if lstm_available:
+            st.caption("Sieć neuronowa z pamięcią długoterminową - rozpoznaje złożone wzorce.")
+        else:
+            st.warning("⚠️ TensorFlow nie jest zainstalowany. LSTM niedostępny.")
+            st.code("pip install tensorflow", language="bash")
+        
+        col5, col6 = st.columns(2)
+        with col5:
+            lstm_units = st.slider(
+                "Neurony LSTM (warstwa 1)",
+                min_value=16, max_value=256, value=config.lstm.units, step=16,
+                help="Więcej neuronów = większa pojemność modelu",
+                disabled=not lstm_available
+            )
+            lstm_units_second = st.slider(
+                "Neurony LSTM (warstwa 2)",
+                min_value=8, max_value=128, value=config.lstm.units_second, step=8,
+                help="Zazwyczaj mniej niż warstwa 1",
+                disabled=not lstm_available
+            )
+            lstm_lookback = st.slider(
+                "Okno historyczne (tygodnie)",
+                min_value=4, max_value=52, value=config.lstm.lookback,
+                help="Ile tygodni wstecz analizujemy",
+                disabled=not lstm_available
+            )
+        with col6:
+            lstm_epochs = st.slider(
+                "Epoki treningu",
+                min_value=10, max_value=200, value=config.lstm.epochs, step=10,
+                help="Więcej = lepsze dopasowanie, ryzyko przeuczenia",
+                disabled=not lstm_available
+            )
+            lstm_dropout = st.slider(
+                "Dropout (regularyzacja)",
+                min_value=0.0, max_value=0.5, value=config.lstm.dropout, step=0.05,
+                help="Zapobiega przeuczeniu (0.1-0.3 zalecane)",
+                disabled=not lstm_available
+            )
+            lstm_batch_size = st.slider(
+                "Rozmiar batcha",
+                min_value=8, max_value=128, value=config.lstm.batch_size, step=8,
+                help="Większy = szybszy trening, mniej stabilny",
+                disabled=not lstm_available
+            )
+        
+        # Global settings
+        st.markdown("---")
+        st.markdown("### 🎯 Ustawienia globalne")
+        
+        col7, col8 = st.columns(2)
+        with col7:
+            weeks_ahead = st.slider(
+                "Domyślny horyzont prognozy (tygodnie)",
+                min_value=1, max_value=12, value=config.weeks_ahead,
+                help="Ile tygodni do przodu prognozować"
+            )
+        with col8:
+            enable_cv = st.checkbox(
+                "Włącz walidację krzyżową",
+                value=config.enable_cross_validation,
+                help="Oceniaj model na danych historycznych przed prognozą"
+            )
+        
+        # Action buttons
+        st.markdown("---")
+        col_save, col_reset = st.columns(2)
+        
+        with col_save:
+            save_clicked = st.form_submit_button("💾 Zapisz konfigurację", use_container_width=True)
+        with col_reset:
+            reset_clicked = st.form_submit_button("🔄 Przywróć domyślne", use_container_width=True)
+        
+        if save_clicked:
+            # Update config with new values
+            config.random_forest.n_estimators = rf_n_estimators
+            config.random_forest.max_depth = rf_max_depth if rf_max_depth < 50 else None
+            config.random_forest.min_samples_split = rf_min_samples_split
+            config.random_forest.min_samples_leaf = rf_min_samples_leaf
+            
+            config.gradient_boosting.n_estimators = gb_n_estimators
+            config.gradient_boosting.learning_rate = gb_learning_rate
+            config.gradient_boosting.max_depth = gb_max_depth
+            config.gradient_boosting.subsample = gb_subsample
+            
+            config.lstm.units = lstm_units
+            config.lstm.units_second = lstm_units_second
+            config.lstm.epochs = lstm_epochs
+            config.lstm.dropout = lstm_dropout
+            config.lstm.lookback = lstm_lookback
+            config.lstm.batch_size = lstm_batch_size
+            
+            config.weeks_ahead = weeks_ahead
+            config.enable_cross_validation = enable_cv
+            
+            if save_config(config):
+                st.success("✅ Konfiguracja ML zapisana!")
+                st.rerun()
+            else:
+                st.error("❌ Błąd zapisu konfiguracji")
+        
+        if reset_clicked:
+            reset_to_defaults()
+            st.success("✅ Przywrócono ustawienia domyślne")
+            st.rerun()
 
 
 # =============================================================================
