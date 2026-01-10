@@ -1519,15 +1519,15 @@ class DatabaseConnector:
             'period': {'from': date_from, 'to': date_to}
         }
         
-        # Orders by status
+        # Orders by status - show ACTIVE orders (Status > 0), not limited by date
         try:
-            q_orders = f"""
+            q_orders = """
             SELECT 
                 ISNULL(cs.CS_StatusNazwa, 'Brak statusu') AS StatusName,
                 COUNT(*) AS Count
             FROM dbo.CtiZlecenieNag zn WITH (NOLOCK)
             LEFT JOIN dbo.CtiStatusy cs ON zn.CZN_Status = cs.CS_StatusNr AND cs.CS_Typ = 1
-            WHERE zn.CZN_DataWystaw BETWEEN '{date_from}' AND '{date_to}'
+            WHERE zn.CZN_Status > 0  -- Active orders only
             GROUP BY cs.CS_StatusNazwa
             """
             df_orders = self.execute_query(q_orders, query_name="dashboard_orders")

@@ -1,15 +1,27 @@
 """
 Admin Panel View.
-Provides user management interface for administrators.
+Provides user management, settings, dashboard and audit interface for administrators.
+
+Extended in v1.6.0 with:
+- Dashboard KPI tab
+- Audit Log tab
+- Alerts Configuration tab
 """
 
 import streamlit as st
 from typing import Optional
+from pathlib import Path
+from datetime import datetime
+
+
+# Project root for model scanning
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+MODELS_DIR = PROJECT_ROOT / "models"
 
 
 def render_admin_view():
     """
-    Renders the admin panel for user management.
+    Renders the admin panel for user management and settings.
     Only accessible by admin users.
     """
     from src.security.auth import get_auth_manager, UserRole
@@ -21,9 +33,141 @@ def render_admin_view():
         st.error("🚫 Brak uprawnień do zarządzania użytkownikami")
         return
     
-    st.subheader("👥 Zarządzanie Użytkownikami")
+    st.subheader("⚙️ Panel Administracyjny")
+    
+    # Create tabs for different admin functions - expanded with new tabs
+    tabs = st.tabs([
+        "📊 Dashboard",
+        "👥 Użytkownicy",
+        "🤖 Ustawienia LLM",
+        "🗄️ Uprawnienia Baz",
+        "🔔 Alerty",
+        "📝 Edycja Promptów",
+        "📋 Audyt",
+        "🔧 Ustawienia Systemowe"
+    ])
+    
+    with tabs[0]:
+        _render_dashboard_tab()
+    
+    with tabs[1]:
+        _render_users_tab()
+    
+    with tabs[2]:
+        _render_llm_settings_tab()
+    
+    with tabs[3]:
+        _render_database_permissions_tab()
+    
+    with tabs[4]:
+        _render_alerts_tab()
+    
+    with tabs[5]:
+        _render_prompts_tab()
+    
+    with tabs[6]:
+        _render_audit_tab()
+    
+    with tabs[7]:
+        _render_system_settings_tab()
+
+
+# =============================================================================
+# DASHBOARD TAB
+# =============================================================================
+
+def _render_dashboard_tab():
+    """Renders the admin dashboard with KPIs."""
+    from src.services.audit_service import get_audit_service
+    from src.security.auth import get_auth_manager
+    
+    st.markdown("### 📊 Dashboard Administracyjny")
+    
+    audit = get_audit_service()
+    auth = get_auth_manager()
+    
+    # Get statistics
+    stats = audit.get_user_stats(days_back=7)
+    users = auth.get_all_users()
+    
+    # KPI metrics row
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "👥 Użytkownicy",
+            len(users),
+            help="Łączna liczba zarejestrowanych użytkowników"
+        )
+    
+    with col2:
+        st.metric(
+            "📈 Akcje (7 dni)",
+            stats['total_actions'],
+            help="Liczba akcji wykonanych w ostatnim tygodniu"
+        )
+    
+    with col3:
+        st.metric(
+            "🔄 Aktywni (7 dni)", 
+            stats['unique_users'],
+            help="Unikalnych użytkowników w ostatnim tygodniu"
+        )
+    
+    with col4:
+        ai_requests = stats['by_action'].get('ANALYSIS_RAW', 0) + stats['by_action'].get('ANALYSIS_BOM', 0)
+        st.metric(
+            "🤖 Zapytań AI",
+            ai_requests,
+            help="Analizy AI w ostatnim tygodniu"
+        )
+    
+    st.markdown("---")
+    
+    # Activity breakdown
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.markdown("**Aktywność wg użytkownika:**")
+        if stats['by_user']:
+            user_df = [{"Użytkownik": k, "Akcje": v} for k, v in stats['by_user'].items()]
+            user_df.sort(key=lambda x: x['Akcje'], reverse=True)
+            st.dataframe(user_df[:10], use_container_width=True)
+        else:
+            st.info("Brak danych")
+    
+    with col_right:
+        st.markdown("**Typy akcji:**")
+        if stats['by_action']:
+            action_df = [{"Typ": k, "Liczba": v} for k, v in stats['by_action'].items()]
+            action_df.sort(key=lambda x: x['Liczba'], reverse=True)
+            st.dataframe(action_df[:10], use_container_width=True)
+        else:
+            st.info("Brak danych")
+    
+    # Last logins
+    st.markdown("---")
+    st.markdown("**Ostatnie logowania:**")
+    recent_logins = audit.get_entries(limit=5, action_filter="LOGIN")
+    if recent_logins:
+        for entry in recent_logins:
+            ts = entry.timestamp[:19].replace('T', ' ')
+            st.caption(f"🔐 {entry.username} - {ts}")
+    else:
+        st.info("Brak logowań w historii")
+
+
+# =============================================================================
+# USERS TAB
+# =============================================================================
+
+def _render_users_tab():
+    """Renders the user management tab."""
+    from src.security.auth import get_auth_manager, UserRole
+    from src.gui.views.login_view import get_current_user
     
     auth = get_auth_manager()
+    user = get_current_user()
     
     # Current users table
     st.markdown("### Lista użytkowników")
@@ -35,10 +179,14 @@ def render_admin_view():
         user_data = []
         for u in users:
             role_display = "🔑 Administrator" if u.role == "admin" else "📊 Zakupowiec"
+            db_display = u.assigned_database or "Wszystkie"
+            llm_display = u.llm_engine or "Globalny"
             user_data.append({
                 "Użytkownik": u.username,
                 "Nazwa": u.display_name or u.username,
-                "Rola": role_display
+                "Rola": role_display,
+                "Baza": db_display,
+                "LLM": llm_display
             })
         
         st.dataframe(user_data, use_container_width=True)
@@ -47,16 +195,16 @@ def render_admin_view():
     
     st.markdown("---")
     
-    # Tabs for operations
-    tab1, tab2, tab3 = st.tabs(["➕ Dodaj użytkownika", "🔑 Zmień hasło", "🗑️ Usuń użytkownika"])
+    # Subtabs for user operations
+    subtab1, subtab2, subtab3 = st.tabs(["➕ Dodaj", "🔑 Zmień hasło", "🗑️ Usuń"])
     
-    with tab1:
+    with subtab1:
         _render_add_user_form(auth)
     
-    with tab2:
+    with subtab2:
         _render_change_password_form(auth, users)
     
-    with tab3:
+    with subtab3:
         _render_delete_user_form(auth, users, user['username'])
 
 
@@ -64,30 +212,11 @@ def _render_add_user_form(auth):
     """Renders form to add new user."""
     from src.security.auth import UserRole
     
-    st.markdown("#### Dodaj nowego użytkownika")
-    
     with st.form("add_user_form"):
-        new_username = st.text_input(
-            "Nazwa użytkownika",
-            placeholder="np. jan.kowalski"
-        )
-        
-        new_display_name = st.text_input(
-            "Imię i nazwisko",
-            placeholder="np. Jan Kowalski"
-        )
-        
-        new_password = st.text_input(
-            "Hasło",
-            type="password",
-            placeholder="Minimum 6 znaków"
-        )
-        
-        new_password_confirm = st.text_input(
-            "Potwierdź hasło",
-            type="password"
-        )
-        
+        new_username = st.text_input("Nazwa użytkownika", placeholder="np. jan.kowalski")
+        new_display_name = st.text_input("Imię i nazwisko", placeholder="np. Jan Kowalski")
+        new_password = st.text_input("Hasło", type="password", placeholder="Min. 6 znaków")
+        new_password_confirm = st.text_input("Potwierdź hasło", type="password")
         new_role = st.selectbox(
             "Rola",
             options=["purchaser", "admin"],
@@ -95,7 +224,6 @@ def _render_add_user_form(auth):
         )
         
         if st.form_submit_button("➕ Dodaj użytkownika", use_container_width=True):
-            # Validation
             if not new_username:
                 st.error("⚠️ Wprowadź nazwę użytkownika")
             elif len(new_password) < 6:
@@ -120,8 +248,6 @@ def _render_add_user_form(auth):
 
 def _render_change_password_form(auth, users):
     """Renders form to change user password."""
-    st.markdown("#### Zmień hasło użytkownika")
-    
     if not users:
         st.info("Brak użytkowników")
         return
@@ -129,7 +255,6 @@ def _render_change_password_form(auth, users):
     with st.form("change_password_form"):
         usernames = [u.username for u in users]
         selected_user = st.selectbox("Użytkownik", usernames)
-        
         new_pass = st.text_input("Nowe hasło", type="password")
         new_pass_confirm = st.text_input("Potwierdź nowe hasło", type="password")
         
@@ -147,21 +272,16 @@ def _render_change_password_form(auth, users):
 
 def _render_delete_user_form(auth, users, current_username):
     """Renders form to delete user."""
-    st.markdown("#### Usuń użytkownika")
-    
-    # Filter out current user (can't delete yourself)
     deletable_users = [u for u in users if u.username != current_username]
     
     if not deletable_users:
-        st.info("Brak użytkowników do usunięcia (nie możesz usunąć siebie)")
+        st.info("Brak użytkowników do usunięcia")
         return
     
     with st.form("delete_user_form"):
         usernames = [u.username for u in deletable_users]
         user_to_delete = st.selectbox("Użytkownik do usunięcia", usernames)
-        
         st.warning("⚠️ Ta operacja jest nieodwracalna!")
-        
         confirm = st.checkbox("Potwierdzam usunięcie użytkownika")
         
         if st.form_submit_button("🗑️ Usuń użytkownika", use_container_width=True):
@@ -173,3 +293,323 @@ def _render_delete_user_form(auth, users, current_username):
                     st.rerun()
                 else:
                     st.error("❌ Nie można usunąć ostatniego administratora")
+
+
+# =============================================================================
+# LLM SETTINGS TAB
+# =============================================================================
+
+def _render_llm_settings_tab():
+    """Renders LLM settings tab."""
+    from src.config_manager import get_config_manager
+    
+    config = get_config_manager()
+    llm_settings = config.get_llm_settings()
+    
+    st.markdown("### Globalne Ustawienia AI")
+    st.info("Ustawienia stosowane dla użytkowników bez indywidualnych przypisań.")
+    
+    with st.form("llm_settings_form"):
+        # Default AI Engine
+        engine_options = ["Local LLM (Embedded)", "Ollama (Local Server)", "Google Gemini (Cloud)"]
+        current_engine_idx = 0
+        for i, opt in enumerate(engine_options):
+            if opt == llm_settings.default_engine:
+                current_engine_idx = i
+                break
+        
+        new_engine = st.selectbox("Domyślny silnik AI", engine_options, index=current_engine_idx)
+        
+        # Local LLM Model
+        st.markdown("**Local LLM**")
+        available_models = []
+        if MODELS_DIR.exists():
+            for f in MODELS_DIR.glob("*.gguf"):
+                size_mb = f.stat().st_size / (1024**2)
+                if size_mb >= 500:
+                    available_models.append(f.name)
+        
+        if available_models:
+            current_model_idx = 0
+            for i, m in enumerate(available_models):
+                if m == llm_settings.default_model:
+                    current_model_idx = i
+                    break
+            new_model = st.selectbox("Domyślny model lokalny", available_models, index=current_model_idx)
+        else:
+            new_model = llm_settings.default_model
+            st.warning("Brak modeli .gguf w folderze /models")
+        
+        # Gemini API Key
+        st.markdown("**Gemini (Cloud)**")
+        new_gemini_key = st.text_input("Klucz API Gemini", value=llm_settings.gemini_api_key, type="password")
+        
+        # Ollama Settings
+        st.markdown("**Ollama**")
+        new_ollama_host = st.text_input("Host Ollama", value=llm_settings.ollama_host)
+        new_ollama_model = st.text_input("Model Ollama", value=llm_settings.ollama_model)
+        
+        if st.form_submit_button("💾 Zapisz ustawienia", use_container_width=True):
+            config.update_llm_settings(
+                default_engine=new_engine,
+                default_model=new_model,
+                gemini_api_key=new_gemini_key,
+                ollama_host=new_ollama_host,
+                ollama_model=new_ollama_model
+            )
+            st.success("✅ Ustawienia LLM zapisane!")
+            st.rerun()
+
+
+# =============================================================================
+# DATABASE PERMISSIONS TAB
+# =============================================================================
+
+def _render_database_permissions_tab():
+    """Renders database permissions tab."""
+    from src.security.auth import get_auth_manager
+    from src.config_manager import get_config_manager
+    
+    auth = get_auth_manager()
+    config = get_config_manager()
+    users = auth.get_all_users()
+    
+    st.markdown("### Przypisanie Baz Danych do Użytkowników")
+    
+    available_dbs = config.get_available_databases()
+    db_options = ["(Wszystkie dostępne)"] + available_dbs
+    engine_options = ["(Globalny)", "Local LLM (Embedded)", "Ollama (Local Server)", "Google Gemini (Cloud)"]
+    
+    for user in users:
+        with st.expander(f"👤 {user.display_name or user.username} ({user.role})"):
+            col1, col2, col3 = st.columns([2, 2, 1])
+            
+            with col1:
+                current_db_idx = 0
+                if user.assigned_database:
+                    try:
+                        current_db_idx = db_options.index(user.assigned_database)
+                    except ValueError:
+                        current_db_idx = 0
+                
+                new_db = st.selectbox("Baza", db_options, index=current_db_idx, key=f"db_{user.username}")
+            
+            with col2:
+                current_engine_idx = 0
+                if user.llm_engine:
+                    try:
+                        current_engine_idx = engine_options.index(user.llm_engine)
+                    except ValueError:
+                        current_engine_idx = 0
+                
+                new_llm = st.selectbox("Silnik AI", engine_options, index=current_engine_idx, key=f"llm_{user.username}")
+            
+            with col3:
+                if st.button("💾", key=f"save_{user.username}"):
+                    user.assigned_database = None if new_db == "(Wszystkie dostępne)" else new_db
+                    user.llm_engine = None if new_llm == "(Globalny)" else new_llm
+                    auth._save_users()
+                    st.success("✅")
+                    st.rerun()
+
+
+# =============================================================================
+# ALERTS TAB
+# =============================================================================
+
+def _render_alerts_tab():
+    """Renders alerts configuration tab."""
+    from src.config_manager import get_config_manager
+    
+    config = get_config_manager()
+    alerts = config.get_alerts()
+    
+    st.markdown("### 🔔 Konfiguracja Alertów")
+    st.info("Ustaw progi dla alertów magazynowych i powiadomień.")
+    
+    with st.form("alerts_form"):
+        st.markdown("**Progi alertów (dni zapasu):**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            new_critical = st.number_input(
+                "🔴 Próg KRYTYCZNY (dni)",
+                min_value=1, max_value=30,
+                value=alerts.critical_days_threshold,
+                help="Produkty z zapasem poniżej tej liczby dni"
+            )
+        with col2:
+            new_low = st.number_input(
+                "🟡 Próg NISKI (dni)",
+                min_value=1, max_value=60,
+                value=alerts.low_days_threshold,
+                help="Produkty z zapasem poniżej tej liczby dni"
+            )
+        
+        st.markdown("**Wykrywanie anomalii:**")
+        new_anomaly = st.slider(
+            "Próg anomalii zużycia (%)",
+            min_value=10, max_value=200,
+            value=alerts.anomaly_percent_threshold,
+            help="Zmiana zużycia większa niż X% zostanie oznaczona jako anomalia"
+        )
+        
+        st.markdown("---")
+        st.markdown("**Raporty automatyczne:**")
+        
+        col3, col4 = st.columns(2)
+        with col3:
+            new_daily = st.checkbox("📅 Raport dzienny", value=alerts.daily_report_enabled)
+        with col4:
+            new_weekly = st.checkbox("📆 Raport tygodniowy", value=alerts.weekly_report_enabled)
+        
+        st.markdown("**Powiadomienia email:**")
+        new_email_enabled = st.checkbox("📧 Włącz powiadomienia email", value=alerts.enable_email_notifications)
+        
+        current_recipients = ", ".join(alerts.email_recipients) if alerts.email_recipients else ""
+        new_recipients = st.text_input(
+            "Odbiorcy (oddzieleni przecinkiem)",
+            value=current_recipients,
+            placeholder="jan@firma.pl, maria@firma.pl"
+        )
+        
+        if st.form_submit_button("💾 Zapisz konfigurację alertów", use_container_width=True):
+            recipients_list = [r.strip() for r in new_recipients.split(",") if r.strip()]
+            config.update_alerts(
+                critical_days_threshold=new_critical,
+                low_days_threshold=new_low,
+                anomaly_percent_threshold=new_anomaly,
+                enable_email_notifications=new_email_enabled,
+                email_recipients=recipients_list,
+                daily_report_enabled=new_daily,
+                weekly_report_enabled=new_weekly
+            )
+            st.success("✅ Konfiguracja alertów zapisana!")
+            st.rerun()
+
+
+# =============================================================================
+# PROMPTS TAB
+# =============================================================================
+
+def _render_prompts_tab():
+    """Renders prompt editor tab."""
+    from src.config_manager import get_config_manager
+    
+    config = get_config_manager()
+    prompts = config.get_prompts()
+    
+    st.markdown("### Edycja Promptów AI")
+    st.info("Zmienne w `{nawiasach}` zostaną zastąpione danymi.")
+    
+    with st.form("prompts_form"):
+        st.markdown("**Prompt Analizy Surowca**")
+        st.caption("Zmienne: {product_name}, {mag_context}, {current_stock}, {last_4_weeks}, {avg_consumption}")
+        new_raw_prompt = st.text_area("Szablon", value=prompts.raw_material_analysis, height=150, key="raw")
+        
+        st.markdown("**Prompt Analizy BOM**")
+        st.caption("Zmienne: {product_name}, {plan_qty}, {selected_mag_info}, {bom_summary}, {warehouse_context}")
+        new_bom_prompt = st.text_area("Szablon", value=prompts.bom_analysis, height=150, key="bom")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.form_submit_button("💾 Zapisz prompty", use_container_width=True):
+                config.update_prompts(raw_material_analysis=new_raw_prompt, bom_analysis=new_bom_prompt)
+                st.success("✅ Prompty zapisane!")
+        with col2:
+            if st.form_submit_button("🔄 Przywróć domyślne", use_container_width=True):
+                config.reset_prompts_to_default()
+                st.success("✅ Prompty przywrócone")
+                st.rerun()
+
+
+# =============================================================================
+# AUDIT TAB
+# =============================================================================
+
+def _render_audit_tab():
+    """Renders audit log tab."""
+    from src.services.audit_service import get_audit_service
+    
+    audit = get_audit_service()
+    
+    st.markdown("### 📋 Historia Działań")
+    
+    # Filters
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        days_filter = st.selectbox("Okres", [7, 14, 30, 90], format_func=lambda x: f"Ostatnie {x} dni")
+    with col2:
+        action_filter = st.text_input("Filtr akcji", placeholder="np. LOGIN, ANALYSIS")
+    with col3:
+        user_filter = st.text_input("Filtr użytkownika", placeholder="np. admin")
+    
+    # Get entries
+    entries = audit.get_entries(
+        limit=200,
+        days_back=days_filter,
+        action_filter=action_filter if action_filter else None,
+        username=user_filter if user_filter else None
+    )
+    
+    st.caption(f"Znaleziono: {len(entries)} wpisów")
+    
+    if entries:
+        # Display as table
+        data = []
+        for e in entries:
+            data.append({
+                "Data/Czas": e.timestamp[:19].replace('T', ' '),
+                "Użytkownik": e.username,
+                "Akcja": e.action,
+                "Szczegóły": e.details[:50] + "..." if len(e.details) > 50 else e.details,
+                "Moduł": e.module
+            })
+        
+        st.dataframe(data, use_container_width=True, height=400)
+        
+        # Export button
+        csv = audit.export_to_csv(entries)
+        st.download_button(
+            "📥 Eksportuj do CSV",
+            csv,
+            f"audit_log_{datetime.now().strftime('%Y%m%d')}.csv",
+            "text/csv"
+        )
+    else:
+        st.info("Brak wpisów audytu dla wybranych filtrów")
+
+
+# =============================================================================
+# SYSTEM SETTINGS TAB
+# =============================================================================
+
+def _render_system_settings_tab():
+    """Renders system settings tab."""
+    from src.config_manager import get_config_manager
+    
+    config = get_config_manager()
+    system = config.get_system_settings()
+    
+    st.markdown("### Ustawienia Systemowe")
+    
+    with st.form("system_settings_form"):
+        new_cache_ttl = st.number_input("Cache TTL (sekundy)", min_value=60, max_value=3600, value=system.cache_ttl_seconds)
+        new_forecast_weeks = st.number_input("Horyzont prognozy (tygodnie)", min_value=4, max_value=52, value=system.max_forecast_weeks)
+        new_retention = st.number_input("Retencja audytu (dni)", min_value=30, max_value=365, value=system.audit_retention_days)
+        
+        st.markdown("**Dostępne bazy danych**")
+        new_databases = st.text_input("Lista baz (przecinek)", value=", ".join(system.available_databases))
+        
+        if st.form_submit_button("💾 Zapisz", use_container_width=True):
+            db_list = [db.strip() for db in new_databases.split(",") if db.strip()]
+            config.update_system_settings(
+                cache_ttl_seconds=new_cache_ttl,
+                max_forecast_weeks=new_forecast_weeks,
+                available_databases=db_list
+            )
+            st.success("✅ Ustawienia zapisane!")
+            st.rerun()
+    
+    st.markdown("---")
+    st.caption(f"📁 Konfiguracja: `{config.config_file}`")

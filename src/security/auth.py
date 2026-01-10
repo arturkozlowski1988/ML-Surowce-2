@@ -60,6 +60,10 @@ class User:
     role: str
     password_hash: str
     display_name: Optional[str] = None
+    # New fields for per-user configuration
+    assigned_database: Optional[str] = None  # Assigned database (None = all available)
+    llm_engine: Optional[str] = None  # Assigned AI engine (None = use global)
+    llm_model: Optional[str] = None  # Assigned LLM model (None = use global)
     
     def get_role(self) -> UserRole:
         """Returns UserRole enum for this user."""
@@ -76,6 +80,10 @@ class User:
     
     def can_manage_users(self) -> bool:
         return self.get_role().can_manage_users
+    
+    def can_configure_llm(self) -> bool:
+        """Check if user can configure LLM settings."""
+        return self.get_role() == UserRole.ADMIN
 
 
 class AuthManager:

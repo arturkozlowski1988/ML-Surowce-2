@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "timestamp": "2026-01-06T14:54:53.401755",
+      "username": "test",
+      "action": "TEST_ACTION",
+      "details": "test details",
+      "ip_address": "",
+      "module": ""
+    }
+  ],
+  "last_updated": "2026-01-06T14:54:53.401923"
+}

@@ -33,100 +33,125 @@ def render_assistant_view(
         prepare_time_series: Preprocessing function
         warehouse_ids: Optional list of warehouse IDs to filter stock
     """
+    from src.gui.views.login_view import get_current_user
+    from src.config_manager import get_config_manager
+    
     st.subheader("🤖 Inteligentny Asystent Zakupowy")
+    
+    # Check user role for LLM selection permissions
+    user = get_current_user()
+    is_admin = user and user.get('role') == 'admin'
+    config = get_config_manager()
     
     # Check Local LLM availability
     local_llm_available, local_llm_status = _check_local_llm()
     
-    # AI Engine Selection
+    # AI Engine Selection - ADMIN ONLY
     col_ai_1, col_ai_2 = st.columns(2)
     
-    with col_ai_1:
-        ai_options = ["Ollama (Local Server)", "Google Gemini (Cloud)"]
-        
-        # Add Local LLM option if available or show info
-        if local_llm_available:
-            ai_options.insert(0, "🚀 Local LLM (Embedded)")
-        
-        ai_source = st.radio("Wybierz Silnik AI:", ai_options)
-        
-        # Model Selection State
-        selected_models = []
-        comparison_mode = False
-        
-        if "Local LLM" in ai_source:
-            # Scan for valid models (filter out incomplete/corrupt files)
-            available_models = []
-            incomplete_models = []
-            
-            if MODELS_DIR.exists():
-                for f in MODELS_DIR.glob("*.gguf"):
-                    size_mb = f.stat().st_size / (1024**2)
-                    if size_mb >= MIN_MODEL_SIZE_MB:
-                        available_models.append(f.name)
-                    else:
-                        incomplete_models.append((f.name, size_mb))
-            
-            if incomplete_models:
-                st.warning(f"⚠️ Niekompletne modele (pomijane): {', '.join([m[0] for m in incomplete_models])}")
-            
-            if not available_models:
-                st.error("Brak poprawnych modeli .gguf w folderze /models! (min. 500MB)")
-            else:
-                comparison_mode = st.checkbox("🆚 Tryb Porównania (Benchmark)", help="Porównaj odpowiedzi dwóch modeli")
-                
-                if comparison_mode:
-                    col_m1, col_m2 = st.columns(2)
-                    with col_m1:
-                        model_a = st.selectbox("Model A (Baza)", available_models, index=0, key="model_a")
-                        selected_models.append(model_a)
-                    with col_m2:
-                        # Try to select different second model by default
-                        default_idx = 1 if len(available_models) > 1 else 0
-                        model_b = st.selectbox("Model B (Challenger)", available_models, index=default_idx, key="model_b")
-                        selected_models.append(model_b)
-                else:
-                    default_model = available_models[0]
-                    # Try to preserve selection
-                    selected_model = st.selectbox("Wybierz Model:", available_models, index=0)
-                    selected_models.append(selected_model)
-        
-        ollama_model = "llama3.2"
-        if "Ollama" in ai_source:
-            ollama_model = st.selectbox("Wybierz Model Ollama:", ["llama3.2", "ministral-3:8b"])
+    # Model Selection State
+    selected_models = []
+    comparison_mode = False
+    ollama_model = config.get_llm_settings().ollama_model
     
-    with col_ai_2:
-        # Show engine status
-        st.markdown("**Status silników AI:**")
-        
-        if local_llm_available:
-            st.success(f"🟢 Local LLM: {local_llm_status}")
+    with col_ai_1:
+        if is_admin:
+            # Full selection for admins
+            ai_options = ["Ollama (Local Server)", "Google Gemini (Cloud)"]
             
-            # Helper to find models
-            model_files = list(MODELS_DIR.glob("*.gguf")) if MODELS_DIR.exists() else []
+            if local_llm_available:
+                ai_options.insert(0, "🚀 Local LLM (Embedded)")
             
-            with st.expander("🛠️ Zarządzanie Modelami"):
-                st.write(f"Folder modeli: `{MODELS_DIR}`")
-                st.write(f"Znaleziono {len(model_files)} plików .gguf")
-                for m in model_files:
-                    size_gb = m.stat().st_size / (1024**3)
-                    status = "✅" if size_gb >= 0.5 else "⚠️ niekompletny"
-                    st.code(f"{status} {m.name} ({size_gb:.2f} GB)")
+            ai_source = st.radio("Wybierz Silnik AI:", ai_options)
+            
+            if "Local LLM" in ai_source:
+                # Scan for valid models (filter out incomplete/corrupt files)
+                available_models = []
+                incomplete_models = []
+                
+                if MODELS_DIR.exists():
+                    for f in MODELS_DIR.glob("*.gguf"):
+                        size_mb = f.stat().st_size / (1024**2)
+                        if size_mb >= MIN_MODEL_SIZE_MB:
+                            available_models.append(f.name)
+                        else:
+                            incomplete_models.append((f.name, size_mb))
+                
+                if incomplete_models:
+                    st.warning(f"⚠️ Niekompletne modele: {', '.join([m[0] for m in incomplete_models])}")
+                
+                if not available_models:
+                    st.error("Brak modeli .gguf w folderze /models!")
+                else:
+                    comparison_mode = st.checkbox("🆚 Tryb Porównania", help="Porównaj 2 modele")
+                    
+                    if comparison_mode:
+                        col_m1, col_m2 = st.columns(2)
+                        with col_m1:
+                            model_a = st.selectbox("Model A", available_models, index=0, key="model_a")
+                            selected_models.append(model_a)
+                        with col_m2:
+                            default_idx = 1 if len(available_models) > 1 else 0
+                            model_b = st.selectbox("Model B", available_models, index=default_idx, key="model_b")
+                            selected_models.append(model_b)
+                    else:
+                        selected_model = st.selectbox("Wybierz Model:", available_models, index=0)
+                        selected_models.append(selected_model)
+            
+            if "Ollama" in ai_source:
+                ollama_model = st.selectbox("Model Ollama:", ["llama3.2", "ministral-3:8b"])
         else:
-            st.warning(f"🟡 Local LLM: {local_llm_status}")
-            with st.expander("Jak skonfigurować Local LLM?"):
-                st.markdown("""
-                1. Pobierz model GGUF (np. DeepSeek R1, Mistral)
-                2. Umieść w folderze `models/`
-                3. Wybierz model w menu po lewej
-                """)
-        
-        # Always show Gemini status
-        gemini_configured = _check_gemini_configured()
-        if gemini_configured:
-            st.success("🟢 Gemini: Skonfigurowany")
-        else:
-            st.warning("🟡 Gemini: Brak klucza API")
+            # READ-ONLY for non-admins - use assigned or global settings
+            username = user.get('username') if user else None
+            ai_source = config.get_user_llm_engine(username)
+            assigned_model = config.get_user_llm_model(username)
+            
+            st.info(f"🔒 **Przypisany silnik AI:** {ai_source}")
+            
+            if "Local LLM" in ai_source:
+                st.caption(f"📦 Model: {assigned_model}")
+                selected_models.append(assigned_model)
+            elif "Ollama" in ai_source:
+                ollama_model = config.get_llm_settings().ollama_model
+                st.caption(f"📦 Model Ollama: {ollama_model}")
+            
+            st.caption("ℹ️ Ustawienia AI konfiguruje administrator")
+
+    
+    if is_admin:
+        with col_ai_2:
+            # Show engine status - ADMIN ONLY
+            st.markdown("**Status silników AI:**")
+            
+            if local_llm_available:
+                st.success(f"🟢 Local LLM: {local_llm_status}")
+                
+                # Helper to find models
+                model_files = list(MODELS_DIR.glob("*.gguf")) if MODELS_DIR.exists() else []
+                
+                with st.expander("🛠️ Zarządzanie Modelami"):
+                    st.write(f"Folder modeli: `{MODELS_DIR}`")
+                    st.write(f"Znaleziono {len(model_files)} plików .gguf")
+                    for m in model_files:
+                        size_gb = m.stat().st_size / (1024**3)
+                        status = "✅" if size_gb >= 0.5 else "⚠️ niekompletny"
+                        st.code(f"{status} {m.name} ({size_gb:.2f} GB)")
+            else:
+                st.warning(f"🟡 Local LLM: {local_llm_status}")
+                with st.expander("Jak skonfigurować Local LLM?"):
+                    st.markdown("""
+                    1. Pobierz model GGUF (np. DeepSeek R1, Mistral)
+                    2. Umieść w folderze `models/`
+                    3. Wybierz model w menu po lewej
+                    """)
+            
+            # Always show Gemini status
+            gemini_configured = _check_gemini_configured()
+            if gemini_configured:
+                st.success("🟢 Gemini: Skonfigurowany")
+            else:
+                st.warning("🟡 Gemini: Brak klucza API")
+
     
     # --- MODE SELECTION: RAW MATERIAL vs FINAL PRODUCT ---
     st.markdown("---")
