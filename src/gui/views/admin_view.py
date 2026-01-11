@@ -885,7 +885,9 @@ def _render_database_permissions_tab():
                 )
 
             with col3:
-                if st.button("💾", key=f"save_{user.username}"):
+                if st.button(
+                    "💾", key=f"save_{user.username}", help=f"Zapisz ustawienia dla {user.username}"
+                ):
                     user.assigned_database = None if new_db == "(Wszystkie dostępne)" else new_db
                     user.llm_engine = None if new_llm == "(Globalny)" else new_llm
                     auth._save_users()
