@@ -218,6 +218,17 @@ class MRPSimulator:
         if shortages.empty:
             return pd.DataFrame()
 
+        # Determine status for each ingredient if not present
+        if "Status" not in shortages.columns:
+            def get_status(row):
+                if row["Shortage"] >= 0:
+                    return "OK"
+                elif row["Shortage"] >= -row["QuantityRequired"] * 0.1:  # Within 10%
+                    return "BRAK"
+                else:
+                    return "KRYTYCZNY"
+            shortages["Status"] = shortages.apply(get_status, axis=1)
+
         # Calculate shortage percentage
         shortages["ShortagePercent"] = (abs(shortages["Shortage"]) / shortages["QuantityRequired"] * 100).round(1)
 

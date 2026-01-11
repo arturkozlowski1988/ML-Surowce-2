@@ -14,6 +14,7 @@ NEW in 1.4.0: User authentication and role-based access control.
 
 import pandas as pd
 import streamlit as st
+import traceback
 
 # Local imports
 from src.db_connector import DatabaseConnector
@@ -150,7 +151,8 @@ def main():
             if not df_stock.empty:
                 df_stock["TowarId"] = pd.to_numeric(df_stock["TowarId"], errors="coerce").fillna(0).astype(int)
                 df_stock["DisplayName"] = df_stock["Name"] + " (" + df_stock["Code"] + ")"
-                product_map = dict(zip(df_stock["TowarId"], df_stock["DisplayName"], strict=False))
+                # strict=False removed for Python 3.9 compatibility and safe assumption of equal length
+                product_map = dict(zip(df_stock["TowarId"], df_stock["DisplayName"]))
                 sorted_product_ids = df_stock["TowarId"].tolist()
 
         start_date = sidebar_state["start_date"]
@@ -196,6 +198,7 @@ def main():
 
     except Exception as e:
         st.error(f"Błąd krytyczny aplikacji: {e}")
+        st.error(traceback.format_exc())
 
 
 # Run the app
