@@ -160,10 +160,3 @@ Projekt demonstruje praktyczne zastosowanie technik omawianych w programie studi
 Ten projekt jest licencjonowany na warunkach [MIT License](LICENSE).
 
 ---
-
-## 👤 Autor
-
-**Artur Kozłowski** - Projekt Zaliczeniowy  
-Studia podyplomowe: *Analiza Danych - Data Science z elementami AI*  
-Uniwersytet WSB Merito Chorzów  
-*2025-2026*
