@@ -40,6 +40,7 @@ def render_admin_view():
         "📊 Dashboard",
         "👥 Użytkownicy",
         "🤖 Ustawienia LLM",
+        "📥 Pobieranie Modeli",
         "⚙️ Konfiguracja ML",
         "🗄️ Uprawnienia Baz",
         "🔔 Alerty",
@@ -58,21 +59,24 @@ def render_admin_view():
         _render_llm_settings_tab()
     
     with tabs[3]:
-        _render_ml_config_tab()
+        _render_model_download_tab()
     
     with tabs[4]:
-        _render_database_permissions_tab()
+        _render_ml_config_tab()
     
     with tabs[5]:
-        _render_alerts_tab()
+        _render_database_permissions_tab()
     
     with tabs[6]:
-        _render_prompts_tab()
+        _render_alerts_tab()
     
     with tabs[7]:
-        _render_audit_tab()
+        _render_prompts_tab()
     
     with tabs[8]:
+        _render_audit_tab()
+    
+    with tabs[9]:
         _render_system_settings_tab()
 
 
@@ -300,6 +304,182 @@ def _render_delete_user_form(auth, users, current_username):
 
 
 # =============================================================================
+# MODEL DOWNLOAD TAB
+# =============================================================================
+
+def _render_model_download_tab():
+    """
+    Renders model download and management tab.
+    Allows downloading LLM models from HuggingFace and managing local models.
+    """
+    st.markdown("### 📥 Pobieranie Modeli LLM")
+    st.info("""
+    **Zarządzanie modelami AI** - pobieraj modele językowe z HuggingFace Hub.
+    Modele są zapisywane lokalnie w folderze `models/`.
+    """)
+    
+    try:
+        from src.services.model_downloader import (
+            get_model_downloader, 
+            AVAILABLE_MODELS, 
+            ModelInfo
+        )
+    except ImportError as e:
+        st.error(f"Nie można załadować modułu pobierania: {e}")
+        return
+    
+    downloader = get_model_downloader()
+    
+    # Section 1: Local Models
+    st.markdown("---")
+    st.markdown("#### 💾 Zainstalowane modele")
+    
+    local_models = downloader.get_local_models()
+    
+    if local_models:
+        for model in local_models:
+            col1, col2, col3 = st.columns([4, 1, 1])
+            with col1:
+                st.markdown(f"**{model['name']}**")
+                st.caption(f"{model['description']} | {model['size_gb']:.1f} GB")
+            with col2:
+                st.success("✅ Zainstalowany")
+            with col3:
+                if st.button("🗑️", key=f"del_{model['filename']}", help="Usuń model"):
+                    if downloader.delete_model(model['filename']):
+                        st.success(f"Usunięto: {model['filename']}")
+                        st.rerun()
+                    else:
+                        st.error("Błąd usuwania")
+    else:
+        st.warning("Brak zainstalowanych modeli. Pobierz model poniżej.")
+    
+    # Section 2: Available Models
+    st.markdown("---")
+    st.markdown("#### 📦 Dostępne modele do pobrania")
+    
+    # Check for huggingface_hub
+    try:
+        import huggingface_hub
+        hf_available = True
+    except ImportError:
+        hf_available = False
+        st.error("⚠️ Brak biblioteki `huggingface_hub`. Zainstaluj:")
+        st.code("pip install huggingface_hub", language="bash")
+    
+    # Group models by family
+    recommended = [m for m in AVAILABLE_MODELS if m.recommended]
+    others = [m for m in AVAILABLE_MODELS if not m.recommended]
+    
+    # Recommended models
+    if recommended:
+        st.markdown("##### ⭐ Zalecane")
+        for model in recommended:
+            _render_model_card(model, downloader, hf_available)
+    
+    # Other models
+    st.markdown("##### 📋 Inne modele")
+    for model in others:
+        _render_model_card(model, downloader, hf_available)
+    
+    # Section 3: Custom model download
+    st.markdown("---")
+    with st.expander("🔧 Pobierz niestandardowy model"):
+        st.markdown("""
+        Podaj dane modelu GGUF z HuggingFace Hub:
+        - Otwórz stronę modelu na HuggingFace
+        - Znajdź plik `.gguf` w zakładce "Files"
+        - Skopiuj nazwę repozytorium i nazwę pliku
+        """)
+        
+        custom_repo = st.text_input(
+            "Repozytorium (repo_id)", 
+            placeholder="np. TheBloke/Llama-2-7B-GGUF"
+        )
+        custom_file = st.text_input(
+            "Nazwa pliku", 
+            placeholder="np. llama-2-7b.Q4_K_M.gguf"
+        )
+        
+        if st.button("📥 Pobierz niestandardowy model", disabled=not hf_available):
+            if custom_repo and custom_file:
+                custom_model = ModelInfo(
+                    name=custom_file,
+                    repo_id=custom_repo,
+                    filename=custom_file,
+                    size_gb=0,
+                    description="Niestandardowy model"
+                )
+                _download_model_with_progress(custom_model, downloader)
+            else:
+                st.warning("Podaj repozytorium i nazwę pliku")
+
+
+def _render_model_card(model: 'ModelInfo', downloader: 'ModelDownloader', hf_available: bool):
+    """Render a single model card with download button."""
+    is_installed = (downloader.models_dir / model.filename).exists()
+    
+    with st.container():
+        col1, col2, col3 = st.columns([3, 1, 1.5])
+        
+        with col1:
+            badge = "⭐ " if model.recommended else ""
+            st.markdown(f"**{badge}{model.name}**")
+            st.caption(f"{model.description}")
+            
+            # Direct links
+            st.markdown(f"""
+            <a href="{model.hf_url}" style="text-decoration:none; margin-right: 10px;">💾 Pobierz plik</a>
+            <a href="{model.hf_page_url}" style="text-decoration:none;">🌐 Strona modelu</a>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"**{model.size_gb:.1f} GB**")
+        
+        with col3:
+            if is_installed:
+                st.success("✅ Zainstalowany")
+            elif hf_available:
+                if st.button("📥 Pobierz", key=f"download_{model.filename}"):
+                    _download_model_with_progress(model, downloader)
+            else:
+                st.button("📥 Pobierz", key=f"download_{model.filename}", disabled=True)
+
+
+def _download_model_with_progress(model: 'ModelInfo', downloader: 'ModelDownloader'):
+    """Download a model with progress bar."""
+    import time
+    
+    progress_bar = st.progress(0, text=f"Rozpoczynam pobieranie: {model.name}")
+    status_text = st.empty()
+    
+    def update_progress(progress):
+        pct = progress.progress_percent / 100
+        progress_bar.progress(
+            pct, 
+            text=f"Pobieranie: {progress.downloaded_gb:.2f} / {progress.total_gb:.2f} GB ({progress.progress_percent:.1f}%)"
+        )
+    
+    try:
+        result = downloader.download_model(model, progress_callback=update_progress)
+        
+        if result.is_complete:
+            progress_bar.progress(1.0, text="✅ Pobieranie zakończone!")
+            status_text.success(f"Model {model.name} został pobrany pomyślnie!")
+            time.sleep(2)
+            st.rerun()
+        elif result.is_error:
+            progress_bar.empty()
+            status_text.error(f"❌ Błąd pobierania: {result.error_message}")
+        else:
+            progress_bar.empty()
+            status_text.warning("Pobieranie anulowane")
+    except Exception as e:
+        progress_bar.empty()
+        status_text.error(f"❌ Błąd: {e}")
+
+
+# =============================================================================
 # ML CONFIGURATION TAB
 # =============================================================================
 
@@ -505,15 +685,39 @@ def _render_llm_settings_tab():
     """Renders LLM settings tab."""
     from src.config_manager import get_config_manager
     
+    # Pre-load OpenRouter models (outside form)
+    try:
+        from src.ai_engine.openrouter_client import OpenRouterClient
+        has_openrouter = True
+    except ImportError:
+        has_openrouter = False
+        
+    if has_openrouter and 'openrouter_models_list' not in st.session_state:
+        st.session_state.openrouter_models_list = OpenRouterClient.get_available_models()
+
     config = get_config_manager()
     llm_settings = config.get_llm_settings()
     
     st.markdown("### Globalne Ustawienia AI")
-    st.info("Ustawienia stosowane dla użytkowników bez indywidualnych przypisań.")
+    
+    col_head, col_btn = st.columns([0.75, 0.25])
+    with col_head:
+        st.info("Ustawienia stosowane dla użytkowników bez indywidualnych przypisań.")
+    with col_btn:
+        if has_openrouter:
+            if st.button("🔄 Odśwież OpenRouter", help="Pobierz świeżą listę modeli"):
+                with st.spinner("Pobieranie..."):
+                    st.session_state.openrouter_models_list = OpenRouterClient.get_available_models(force_refresh=True)
+                st.rerun()
     
     with st.form("llm_settings_form"):
-        # Default AI Engine
-        engine_options = ["Local LLM (Embedded)", "Ollama (Local Server)", "Google Gemini (Cloud)"]
+        # Default AI Engine - now includes OpenRouter
+        engine_options = [
+            "Local LLM (Embedded)", 
+            "Ollama (Local Server)", 
+            "Google Gemini (Cloud)",
+            "OpenRouter (Cloud - 100+ modeli)"
+        ]
         current_engine_idx = 0
         for i, opt in enumerate(engine_options):
             if opt == llm_settings.default_engine:
@@ -545,6 +749,44 @@ def _render_llm_settings_tab():
         # Gemini API Key
         st.markdown("**Gemini (Cloud)**")
         new_gemini_key = st.text_input("Klucz API Gemini", value=llm_settings.gemini_api_key, type="password")
+        st.caption("Pobierz klucz: [Google AI Studio](https://aistudio.google.com/apikey)")
+        
+        # OpenRouter Settings (NEW)
+        st.markdown("**OpenRouter (Cloud - 100+ modeli)**")
+        st.caption("🆓 Dostępne modele darmowe i płatne. Pobierz klucz: [openrouter.ai/keys](https://openrouter.ai/keys)")
+        
+        new_openrouter_key = st.text_input(
+            "Klucz API OpenRouter", 
+            value=getattr(llm_settings, 'openrouter_api_key', ''), 
+            type="password"
+        )
+        
+        # OpenRouter model selection
+        # OpenRouter model selection
+        if has_openrouter:
+            models_list = st.session_state.openrouter_models_list
+            or_model_options = [(m.id, m.display_name) for m in models_list]
+            or_ids = [m[0] for m in or_model_options]
+            or_names = [m[1] for m in or_model_options]
+            
+            current_or_model = getattr(llm_settings, 'openrouter_model', 'meta-llama/llama-3.2-3b-instruct:free')
+            
+            # Check if current model exists in list
+            if current_or_model in or_ids:
+                current_or_idx = or_ids.index(current_or_model)
+            else:
+                current_or_idx = 0
+
+            new_or_model = st.selectbox(
+                "Model OpenRouter",
+                options=or_ids,
+                format_func=lambda x: or_names[or_ids.index(x)] if x in or_ids else x,
+                index=current_or_idx,
+                help="🆓 = darmowy, 💰 = płatny"
+            )
+        else:
+            new_or_model = "meta-llama/llama-3.2-3b-instruct:free"
+            st.warning("Biblioteka OpenRouterClient niedostępna")
         
         # Ollama Settings
         st.markdown("**Ollama**")
@@ -557,7 +799,9 @@ def _render_llm_settings_tab():
                 default_model=new_model,
                 gemini_api_key=new_gemini_key,
                 ollama_host=new_ollama_host,
-                ollama_model=new_ollama_model
+                ollama_model=new_ollama_model,
+                openrouter_api_key=new_openrouter_key,
+                openrouter_model=new_or_model
             )
             st.success("✅ Ustawienia LLM zapisane!")
             st.rerun()

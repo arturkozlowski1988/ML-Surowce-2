@@ -1,0 +1,44 @@
+# Streamlit Server Configuration
+# For network/LAN deployment - allows access from other computers
+
+[global]
+# Disable usage statistics for privacy
+gatherUsageStats = false
+
+[server]
+# NETWORK ACCESS: Bind to all network interfaces (0.0.0.0)
+# This allows access from other computers on the LAN
+address = "0.0.0.0"
+
+# Default port (change to 80 for standard HTTP access)
+port = 8501
+
+# PRODUCTION: Don't open browser on server
+headless = true
+
+# Allow embedding in iframes (if needed)
+enableCORS = false
+
+# SECURITY: Enable XSRF protection
+enableXsrfProtection = true
+
+# Max file upload size (MB)
+maxUploadSize = 200
+
+# Enable WebSocket compression for better performance
+enableWebsocketCompression = true
+
+[browser]
+# Don't collect usage stats
+gatherUsageStats = false
+
+# Server URL for browser access (optional - helps with proxies)
+# serverAddress = "your-server-ip"
+# serverPort = 8501
+
+[theme]
+# Company branding (optional)
+# primaryColor = "#1E88E5"
+# backgroundColor = "#FFFFFF"
+# secondaryBackgroundColor = "#F0F2F6"
+# textColor = "#262730"

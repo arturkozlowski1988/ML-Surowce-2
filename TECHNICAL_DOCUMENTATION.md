@@ -1,7 +1,7 @@
 # Dokumentacja Techniczna: AI Supply Assistant
 
-> **Wersja**: 1.4.0  
-> **Data aktualizacji**: 2026-01-05  
+> **Wersja**: 1.5.0  
+> **Data aktualizacji**: 2026-01-10  
 > **System**: ERP Comarch Optima / Produkcja by CTI  
 > **Środowisko**: Python 3.9+, MS SQL Server, Streamlit
 
@@ -41,8 +41,9 @@ Aplikacja wykorzystuje wzorzec **MVVM (Model-View-ViewModel)** w warstwie prezen
 | **Frontend** | Streamlit 1.30+, Plotly (wykresy interaktywne) |
 | **Backend** | Python 3.9+, SQLAlchemy (ORM) |
 | **Baza Danych** | MS SQL Server (Comarch Optima/CDN) |
-| **ML/AI** | scikit-learn, statsmodels, Google Gemini API, Ollama, llama-cpp-python |
-| **Bezpieczeństwo** | python-dotenv, cryptography (Fernet), audit logging |
+| **ML/AI** | scikit-learn, statsmodels, TensorFlow/Keras (LSTM), Google Gemini API, OpenRouter API (Access to 100+ models), Ollama, llama-cpp-python |
+| **Model Management** | huggingface_hub (pobieranie modeli), joblib (persistence) |
+| **Bezpieczeństwo** | python-dotenv, cryptography (Fernet), bcrypt, audit logging |
 
 ### Struktura Katalogów
 
@@ -55,6 +56,7 @@ ai-supply-assistant/
 │   ├── forecasting.py           # ML models (RF, GB, ES)
 │   ├── ai_engine/
 │   │   ├── gemini_client.py     # Google Gemini API
+│   │   ├── openrouter_client.py # OpenRouter API (Cloud)
 │   │   ├── ollama_client.py     # Ollama local server
 │   │   ├── local_llm.py         # Embedded LLM (llama-cpp)
 │   │   └── anonymizer.py        # PII anonymization
@@ -418,7 +420,31 @@ Aplikacja wspiera **3 silniki AI**:
 - Dane są **anonimizowane** przed wysyłką (moduł `anonymizer.py`).
 - NIP, PESEL, email są maskowane (regex patterns).
 
-### 2. Ollama Client
+### 2. OpenRouter Client (Cloud)
+
+**Plik**: `src/ai_engine/openrouter_client.py`
+
+**Model**: Konfigurowalny (domyślnie `meta-llama/llama-3.2-3b-instruct`).
+
+**Parametry wejściowe**:
+
+- `OPENROUTER_API_KEY` (zmienna środowiskowa).
+
+**Metody**:
+
+- `generate_explanation(prompt: str) -> str`: Generuje odpowiedź (interface kompatybilny z OpenAI).
+
+**Zalety**:
+
+- Dostęp do 100+ modeli (GPT-4o, Claude 3.5 Sonnet, Llama 3).
+- Brak kosztów utrzymania infrastruktury.
+- Modele darmowe dostępne w API.
+
+**Bezpieczeństwo**:
+
+- Anonimizacja danych przed wysłaniem.
+
+### 3. Ollama Client
 
 **Plik**: `src/ai_engine/ollama_client.py`
 

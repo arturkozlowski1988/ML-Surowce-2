@@ -4,6 +4,38 @@
 
 ### Added
 
+- **🌐 Network/LAN Deployment**:
+  - `.streamlit/config.toml` - konfiguracja serwera dla dostępu sieciowego
+  - `start_server.bat` - skrypt startowy z wykrywaniem IP i instrukcjami firewall
+  - Obsługa wielu użytkowników z różnych stacji roboczych
+  - Dokumentacja instalacji jako Windows Service (NSSM)
+
+- **📦 Windows Installer**:
+  - `install.bat` - launcher instalatora z uprawnieniami administratora
+  - `Install-AISupplyAssistant.ps1` - automatyczna instalacja z konfiguracją
+  - Sprawdzanie wymagań (Python, ODBC Driver 17)
+  - Automatyczna instalacja zależności pip
+  - Konfiguracja Windows Firewall
+  - Instalacja usługi Windows (NSSM)
+  - Tworzenie skrótu na pulpicie
+  - `uninstall.bat` - deinstalator
+
+- **📥 Pobieranie Modeli LLM (Admin Panel)**:
+  - Nowa zakładka "Pobieranie Modeli" w Panelu Admina
+  - Bezpośrednie linki do pobierania i strony modelu na HuggingFace
+  - Lista dostępnych modeli GGUF (Qwen, Llama, Mistral, Phi-3)
+  - Pobieranie z HuggingFace Hub z paskiem postępu
+  - Zarządzanie lokalnymi modelami (usuwanie)
+  - Pobieranie niestandardowych modeli by repo_id
+  - `src/services/model_downloader.py` - nowy serwis pobierania
+
+- **☁️ OpenRouter Integration**:
+  - Obsługa API OpenRouter (dostęp do 100+ modeli, m.in. GPT-4, Claude, Llama 3)
+  - Konfiguracja klucza API i modelu w Panelu Admina (Ustawienia LLM)
+  - Wybór OpenRouter jako silnika AI w Asystencie Zakupowym
+  - Obsługa darmowych i płatnych modeli
+  - Pełna integracja z logiką aplikacji (anonimizacja, prompty)
+
 - **🧠 LSTM Deep Learning Model**:
   - Nowy model sieci neuronowej dla prognozowania szeregów czasowych
   - Obsługa wielowarstwowej architektury LSTM z dropout

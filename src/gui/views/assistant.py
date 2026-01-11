@@ -53,11 +53,12 @@ def render_assistant_view(
     selected_models = []
     comparison_mode = False
     ollama_model = config.get_llm_settings().ollama_model
+    openrouter_model = getattr(config.get_llm_settings(), 'openrouter_model', None)
     
     with col_ai_1:
         if is_admin:
             # Full selection for admins
-            ai_options = ["Ollama (Local Server)", "Google Gemini (Cloud)"]
+            ai_options = ["Ollama (Local Server)", "Google Gemini (Cloud)", "OpenRouter (Cloud)"]
             
             if local_llm_available:
                 ai_options.insert(0, "🚀 Local LLM (Embedded)")
@@ -125,8 +126,25 @@ def render_assistant_view(
             
             if local_llm_available:
                 st.success(f"🟢 Local LLM: {local_llm_status}")
-                
-                # Helper to find models
+            
+            # OpenRouter Status
+            if "OpenRouter" in ai_source:
+                openrouter_configured = _check_openrouter_configured()
+                if openrouter_configured:
+                    st.success("🟢 OpenRouter: Skonfigurowany")
+                else:
+                    st.warning("🟡 OpenRouter: Brak klucza API")
+            
+            # Always show Gemini status
+            gemini_configured = _check_gemini_configured()
+            if gemini_configured:
+                st.success("🟢 Gemini: Skonfigurowany")
+            else:
+                st.warning("🟡 Gemini: Brak klucza API")
+
+            # Local LLM helper...
+            if local_llm_available:
+                 # Helper to find models
                 model_files = list(MODELS_DIR.glob("*.gguf")) if MODELS_DIR.exists() else []
                 
                 with st.expander("🛠️ Zarządzanie Modelami"):
@@ -145,19 +163,14 @@ def render_assistant_view(
                     3. Wybierz model w menu po lewej
                     """)
             
-            # Always show Gemini status
-            gemini_configured = _check_gemini_configured()
-            if gemini_configured:
-                st.success("🟢 Gemini: Skonfigurowany")
-            else:
-                st.warning("🟡 Gemini: Brak klucza API")
+
 
     
     # --- MODE SELECTION: RAW MATERIAL vs FINAL PRODUCT ---
     st.markdown("---")
     
     # Security info banner
-    if "Gemini" in ai_source:
+    if "Gemini" in ai_source or "OpenRouter" in ai_source:
         st.info("🔒 **Bezpieczeństwo:** Twoje dane są anonimizowane przed wysłaniem do AI (NIP, PESEL, email)")
     elif "Local LLM" in ai_source:
         st.success("🔒 **Prywatność:** Dane przetwarzane lokalnie - nic nie opuszcza Twojego komputera")
@@ -171,12 +184,12 @@ def render_assistant_view(
     if analysis_mode == "Analiza Surowca (Anomalie)":
         _render_raw_material_analysis(
             db, product_map, sorted_product_ids, 
-            prepare_time_series, ai_source, ollama_model,
+            prepare_time_series, ai_source, ollama_model, openrouter_model,
             selected_models, comparison_mode, warehouse_ids
         )
     else:
         _render_final_product_analysis(
-            db, ai_source, ollama_model, 
+            db, ai_source, ollama_model, openrouter_model,
             selected_models, comparison_mode, warehouse_ids
         )
 
@@ -196,13 +209,43 @@ def _check_gemini_configured() -> bool:
     """Check if Gemini API key is configured."""
     import os
     from dotenv import load_dotenv
+    from src.config_manager import get_config_manager
     load_dotenv()
-    return bool(os.getenv('GEMINI_API_KEY'))
+    
+    # Check env
+    if os.getenv('GEMINI_API_KEY'):
+        return True
+        
+    # Check config
+    try:
+        config = get_config_manager()
+        return bool(config.get_llm_settings().gemini_api_key)
+    except:
+        return False
+
+
+def _check_openrouter_configured() -> bool:
+    """Check if OpenRouter API key is configured."""
+    import os
+    from dotenv import load_dotenv
+    from src.config_manager import get_config_manager
+    load_dotenv()
+    
+    # Check env
+    if os.getenv('OPENROUTER_API_KEY'):
+        return True
+        
+    # Check config
+    try:
+        config = get_config_manager()
+        return bool(config.get_llm_settings().openrouter_api_key)
+    except:
+        return False
 
 
 def _render_raw_material_analysis(
     db, product_map, sorted_product_ids, 
-    prepare_time_series, ai_source, ollama_model,
+    prepare_time_series, ai_source, ollama_model, openrouter_model,
     selected_models=[], comparison_mode=False, warehouse_ids=None
 ):
     """Renders raw material anomaly analysis."""
@@ -273,7 +316,7 @@ def _render_raw_material_analysis(
             Odpowiedz krótko i konkretnie w języku polskim.
             """
             
-            response_text = _generate_ai_response(prompt, ai_source, ollama_model)
+            response_text = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model)
             
             st.markdown("### 💡 Wnioski AI")
             
@@ -285,20 +328,20 @@ def _render_raw_material_analysis(
                     st.markdown(f"**Model A: {selected_models[0]}**")
                     with st.spinner(f"Geneowanie (Model A)..."):
                         path_a = str(MODELS_DIR / selected_models[0])
-                        resp_a = _generate_ai_response(prompt, ai_source, ollama_model, local_model_path=path_a)
+                        resp_a = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_a)
                         st.info(resp_a)
                 
                 with col_res2:
                     st.markdown(f"**Model B: {selected_models[1]}**")
                     with st.spinner(f"Generowanie (Model B)..."):
                         path_b = str(MODELS_DIR / selected_models[1])
-                        resp_b = _generate_ai_response(prompt, ai_source, ollama_model, local_model_path=path_b)
+                        resp_b = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_b)
                         st.success(resp_b)
                         
             else:
                 # Single Mode
                 model_path = str(MODELS_DIR / selected_models[0]) if selected_models else None
-                response_text = _generate_ai_response(prompt, ai_source, ollama_model, local_model_path=model_path)
+                response_text = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=model_path)
                 st.write(response_text)
 
             with st.expander("Pokaż Prompt (Debug)"):
@@ -306,7 +349,7 @@ def _render_raw_material_analysis(
 
 
 def _render_final_product_analysis(
-    db, ai_source, ollama_model, 
+    db, ai_source, ollama_model, openrouter_model,
     selected_models=[], comparison_mode=False, warehouse_ids=None
 ):
     """Renders final product (BOM) analysis with warehouse filtering."""
@@ -394,20 +437,20 @@ def _render_final_product_analysis(
                     st.markdown(f"**Model A: {selected_models[0]}**")
                     with st.spinner(f"Geneowanie (Model A)..."):
                         path_a = str(MODELS_DIR / selected_models[0])
-                        resp_a = _generate_ai_response(prompt, ai_source, ollama_model, local_model_path=path_a)
+                        resp_a = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_a)
                         st.info(resp_a)
                 
                 with col_res2:
                     st.markdown(f"**Model B: {selected_models[1]}**")
                     with st.spinner(f"Generowanie (Model B)..."):
                         path_b = str(MODELS_DIR / selected_models[1])
-                        resp_b = _generate_ai_response(prompt, ai_source, ollama_model, local_model_path=path_b)
+                        resp_b = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_b)
                         st.success(resp_b)
                         
             else:
                 # Single Mode
                 model_path = str(MODELS_DIR / selected_models[0]) if selected_models else None
-                response_text = _generate_ai_response(prompt, ai_source, ollama_model, local_model_path=model_path)
+                response_text = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=model_path)
                 st.write(response_text)
             
             with st.expander("Szczegóły kalkulacji (Tabela)"):
@@ -421,18 +464,36 @@ def _render_final_product_analysis(
                 st.code(prompt)
 
 
-def _generate_ai_response(prompt: str, ai_source: str, ollama_model: str, local_model_path: Optional[str] = None) -> str:
+def _generate_ai_response(prompt: str, ai_source: str, ollama_model: str, openrouter_model: str, local_model_path: Optional[str] = None) -> str:
     """
     Generates AI response using selected engine.
-    Handles Gemini, Ollama, and Local LLM with proper error handling.
+    Handles Gemini, Ollama, OpenRouter, and Local LLM with proper error handling.
     """
     try:
+        from src.ai_engine.anonymizer import DataAnonymizer
+        anonymizer = DataAnonymizer()
+        safe_prompt = anonymizer.anonymize_text(prompt)
+
         if "Gemini" in ai_source:
             from src.ai_engine.gemini_client import GeminiClient
-            from src.ai_engine.anonymizer import DataAnonymizer
-            anonymizer = DataAnonymizer()
-            safe_prompt = anonymizer.anonymize_text(prompt)
-            client = GeminiClient()
+            from src.config_manager import get_config_manager
+            
+            key = getattr(get_config_manager().get_llm_settings(), 'gemini_api_key', None)
+            client = GeminiClient(api_key=key)
+            return client.generate_explanation(safe_prompt)
+        
+        elif "OpenRouter" in ai_source:
+            from src.ai_engine.openrouter_client import OpenRouterClient
+            from src.config_manager import get_config_manager
+            
+            config = get_config_manager()
+            settings = config.get_llm_settings()
+            
+            # Get model and key from config
+            model_id = getattr(settings, 'openrouter_model', None)
+            api_key = getattr(settings, 'openrouter_api_key', None)
+            
+            client = OpenRouterClient(model_id=model_id, api_key=api_key)
             return client.generate_explanation(safe_prompt)
         
         elif "Local LLM" in ai_source:
@@ -450,4 +511,4 @@ def _generate_ai_response(prompt: str, ai_source: str, ollama_model: str, local_
             return client.generate_explanation(prompt)
             
     except Exception as e:
-        return f"Błąd podczas generowania odpowiedzi AI: {str(e)}"
+        return f"Błąd podczas generowania odpowiedzi AI ({ai_source}): {str(e)}"

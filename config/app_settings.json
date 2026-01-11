@@ -1,31 +1,33 @@
 {
-    "llm": {
-        "default_engine": "Local LLM (Embedded)",
-        "default_model": "qwen2.5-7b-instruct-q3_k_m.gguf",
-        "gemini_api_key": "",
-        "ollama_host": "http://localhost:11434",
-        "ollama_model": "llama3.2"
-    },
-    "prompts": {
-        "raw_material_analysis": "Jesteś ekspertem ds. łańcucha dostaw. Przeanalizuj sytuację dla surowca: {product_name}.\n\nDANE:\n- Obecny stan magazynowy {mag_context}: {current_stock:.2f}\n- Ostatnie 4 tygodnie zużycia: {last_4_weeks}\n- Średnie zużycie tygodniowe: {avg_consumption:.2f}\n\nPYTANIA:\n1. Czy trend zużycia jest rosnący czy malejący?\n2. Na ile tygodni wystarczy obecny zapas (Coverage)?\n3. Czy sugerujesz zwiększenie zapasów?\n4. Jakie mogą być przyczyny anomalii (jeśli występują)?\n\nOdpowiedz krótko i konkretnie w języku polskim.",
-        "bom_analysis": "Jesteś asystentem zakupowym w fabryce. Planujemy produkcję wyrobu: {product_name}.\nIlość do wyprodukowania: {plan_qty} szt.\n\nOto analiza zapotrzebowania na surowce (BOM vs Magazyn) {selected_mag_info}:\n{bom_summary}\n{warehouse_context}\n\nZadanie:\n1. Wskaż krytyczne braki (co musimy pilnie zamówić?).\n2. Jeśli są surowce na innych magazynach - zasugeruj przesunięcie międzymagazynowe.\n3. Czy są jakieś ryzyka dla ciągłości produkcji?\n4. Podaj rekomendację dla działu zakupów.\nOdpowiedz krótko i konkretnie w języku polskim."
-    },
-    "alerts": {
-        "critical_days_threshold": 7,
-        "low_days_threshold": 14,
-        "anomaly_percent_threshold": 50,
-        "enable_email_notifications": false,
-        "email_recipients": [],
-        "daily_report_enabled": false,
-        "weekly_report_enabled": true
-    },
-    "system": {
-        "cache_ttl_seconds": 300,
-        "max_forecast_weeks": 12,
-        "available_databases": [
-            "cdn_test",
-            "cdn_mietex"
-        ],
-        "audit_retention_days": 90
-    }
+  "llm": {
+    "default_engine": "OpenRouter (Cloud - 100+ modeli)",
+    "default_model": "qwen2.5-7b-instruct-q3_k_m.gguf",
+    "gemini_api_key": "AIzaSyBKQ4IfKtb8sMcl50xmPd53Hy2x_5tWqYI",
+    "ollama_host": "http://localhost:11434",
+    "ollama_model": "llama3.2",
+    "openrouter_api_key": "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",
+    "openrouter_model": "xiaomi/mimo-v2-flash:free"
+  },
+  "prompts": {
+    "raw_material_analysis": "Jesteś ekspertem ds. łańcucha dostaw. Przeanalizuj sytuację dla surowca: {product_name}.\n\nDANE:\n- Obecny stan magazynowy {mag_context}: {current_stock:.2f}\n- Ostatnie 4 tygodnie zużycia: {last_4_weeks}\n- Średnie zużycie tygodniowe: {avg_consumption:.2f}\n\nPYTANIA:\n1. Czy trend zużycia jest rosnący czy malejący?\n2. Na ile tygodni wystarczy obecny zapas (Coverage)?\n3. Czy sugerujesz zwiększenie zapasów?\n4. Jakie mogą być przyczyny anomalii (jeśli występują)?\n\nOdpowiedz krótko i konkretnie w języku polskim.",
+    "bom_analysis": "Jesteś asystentem zakupowym w fabryce. Planujemy produkcję wyrobu: {product_name}.\nIlość do wyprodukowania: {plan_qty} szt.\n\nOto analiza zapotrzebowania na surowce (BOM vs Magazyn) {selected_mag_info}:\n{bom_summary}\n{warehouse_context}\n\nZadanie:\n1. Wskaż krytyczne braki (co musimy pilnie zamówić?).\n2. Jeśli są surowce na innych magazynach - zasugeruj przesunięcie międzymagazynowe.\n3. Czy są jakieś ryzyka dla ciągłości produkcji?\n4. Podaj rekomendację dla działu zakupów.\nOdpowiedz krótko i konkretnie w języku polskim."
+  },
+  "alerts": {
+    "critical_days_threshold": 7,
+    "low_days_threshold": 14,
+    "anomaly_percent_threshold": 50,
+    "enable_email_notifications": false,
+    "email_recipients": [],
+    "daily_report_enabled": false,
+    "weekly_report_enabled": true
+  },
+  "system": {
+    "cache_ttl_seconds": 300,
+    "max_forecast_weeks": 12,
+    "available_databases": [
+      "cdn_test",
+      "cdn_mietex"
+    ],
+    "audit_retention_days": 90
+  }
 }

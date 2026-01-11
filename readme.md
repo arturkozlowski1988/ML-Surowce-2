@@ -12,13 +12,18 @@ System wspiera działy zakupów i produkcji w analizie zużycia surowców, progn
 ## ✨ Funkcjonalności
 
 | Moduł | Opis |
-|:------|:-----:|
+|:------|:-----|
 | **📊 Analiza Danych** | Wykresy trendów zużycia, Panel Zakupowca z BOM |
-| **📈 Predykcja** | Prognoza popytu (Random Forest, Gradient Boosting, Exp. Smoothing) |
-| **🤖 AI Assistant** | Analiza anomalii i rekomendacje zakupowe (Gemini / Ollama / Local LLM) |
+| **📈 Predykcja ML** | Prognoza popytu (RF, GB, Exp. Smoothing, **🧠 LSTM Deep Learning**) |
+| **📉 Metryki jakości** | MAPE, RMSE, MAE, R² - ocena dokładności prognoz |
+| **🤖 AI Assistant** | Analiza anomalii i rekomendacje (Gemini / Ollama / Local LLM) |
+| **📥 Pobieranie modeli** | Pobieranie GGUF z HuggingFace (Qwen, Llama, Mistral, Phi-3) |
+| **🌐 Deployment sieciowy** | Obsługa wielu użytkowników w sieci LAN |
+| **⚙️ Konfiguracja ML** | Panel admina do tuningu hiperparametrów modeli |
 | **🏭 Filtrowanie Magazynów** | Analiza per magazyn z kontekstem w promptach AI |
 | **🔐 System Użytkowników** | Logowanie, role (Admin/Zakupowiec), kontrola dostępu |
 | **🔌 Kreator Połączenia** | Automatyczne wykrywanie SQL Server, łatwa konfiguracja |
+| **📦 Instalator Windows** | Automatyczna instalacja i konfiguracja usługi |
 
 ---
 

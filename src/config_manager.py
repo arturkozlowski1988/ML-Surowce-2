@@ -24,6 +24,8 @@ class LLMSettings:
     gemini_api_key: str = ""
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "meta-llama/llama-3.2-3b-instruct:free"
 
 
 @dataclass
@@ -191,7 +193,9 @@ Odpowiedz krótko i konkretnie w języku polskim."""
         default_model: str = None,
         gemini_api_key: str = None,
         ollama_host: str = None,
-        ollama_model: str = None
+        ollama_model: str = None,
+        openrouter_api_key: str = None,
+        openrouter_model: str = None
     ):
         """Updates LLM settings."""
         if default_engine is not None:
@@ -204,6 +208,10 @@ Odpowiedz krótko i konkretnie w języku polskim."""
             self._config.llm.ollama_host = ollama_host
         if ollama_model is not None:
             self._config.llm.ollama_model = ollama_model
+        if openrouter_api_key is not None:
+            self._config.llm.openrouter_api_key = openrouter_api_key
+        if openrouter_model is not None:
+            self._config.llm.openrouter_model = openrouter_model
         
         self.save()
         logger.info("LLM settings updated")
