@@ -81,7 +81,6 @@ ai-supply-assistant/
 │       └── async_loader.py      # Async data loading
 ├── scripts/                     # Utility scripts (testing, debugging)
 ├── models/                      # LLM models (GGUF format)
-├── notebooks/                   # Jupyter notebooks
 └── requirements.txt
 ```
 

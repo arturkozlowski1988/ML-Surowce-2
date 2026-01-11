@@ -126,7 +126,9 @@ ai-supply-assistant/
 - [Instrukcja Użytkownika](USER_GUIDE.md) - Przewodnik dla użytkowników końcowych
 - [Dokumentacja Techniczna](TECHNICAL_DOCUMENTATION.md) - Architektura i API
 - [Historia Zmian](CHANGELOG.md) - Changelog projektu
-- [Prezentacja Akademicka](notebooks/prezentacja_akademicka.ipynb) - Jupyter Notebook z demonstracją projektu
+- [Instrukcja Użytkownika](USER_GUIDE.md) - Przewodnik dla użytkowników końcowych
+- [Dokumentacja Techniczna](TECHNICAL_DOCUMENTATION.md) - Architektura i API
+- [Historia Zmian](CHANGELOG.md) - Changelog projektu
 
 ---
 

@@ -60,18 +60,23 @@ models/*.joblib
 models/*.gguf
 
 # Jupyter
-notebooks/.ipynb_checkpoints/
+notebooks/
 .ipynb_checkpoints/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Archive (deprecated scripts)
-scripts/archive/
+# Scripts and Tools (Dev only)
+scripts/
 
 # Build artifacts
 *.spec
 build/
 dist/
 config/secrets.json
+
+# Generated Documentation Artifacts (not needed for execution)
+pdf_content.txt
+product_summary.md
+dokumentacja_koncowa_projektu.md
