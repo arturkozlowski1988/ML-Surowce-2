@@ -121,7 +121,7 @@
   - Panel Admina: zarządzanie użytkownikami (dodawanie, usuwanie, zmiana haseł)
   - Zakupowiec nie może zmieniać bazy danych ani konfiguracji
   - Hasła hashowane bcrypt (bezpieczne przechowywanie w `config/users.json`)
-  
+
 - **🔌 Kreator Połączenia z Bazą Danych**:
   - Automatyczne wykrywanie lokalnych instancji SQL Server z rejestru Windows
   - 4-krokowy kreator: Serwer → Logowanie → Baza → Potwierdzenie
@@ -182,7 +182,7 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.0.0/).
   - Wyższa jakość odpowiedzi i lepsze rozumowanie
   - Model GGUF (~3.55 GB) z kwantyzacją Q3_K_M
   - Zachowano backup model 3B do szybkich analiz
-  
+
 - **📊 Porównanie Modeli**:
   - Przeprowadzono testy porównawcze modeli (Qwen2.5 3B vs 7B)
   - Dokumentacja wyników w `models/MODEL_COMPARISON.md`
@@ -240,11 +240,11 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.0.0/).
 
 ### Dlaczego Qwen2.5-3B?
 
-✅ Najnowszy dostępny model (Q4 2024)  
-✅ Doskonały do analiz biznesowych i supply chain  
-✅ Duży kontekst (32k) vs Phi-3 (4k)  
-✅ Optymalny rozmiar (1.96 GB)  
-✅ 100% RODO-compliant - dane lokalne  
+✅ Najnowszy dostępny model (Q4 2024)
+✅ Doskonały do analiz biznesowych i supply chain
+✅ Duży kontekst (32k) vs Phi-3 (4k)
+✅ Optymalny rozmiar (1.96 GB)
+✅ 100% RODO-compliant - dane lokalne
 
 ## [1.0.0] - 2025-12-26
 

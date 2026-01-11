@@ -3,12 +3,12 @@ AI Assistant view for the AI Supply Assistant.
 Provides GenAI-powered analysis using Ollama, Google Gemini, or Local LLM (Embedded).
 """
 
-import streamlit as st
-import pandas as pd
-from typing import Dict, List, Optional
-import os
-from pathlib import Path
 import time
+from pathlib import Path
+from typing import Optional
+
+import pandas as pd
+import streamlit as st
 
 # Project root for absolute path resolution
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -17,15 +17,11 @@ MIN_MODEL_SIZE_MB = 500  # Minimum valid model size in MB
 
 
 def render_assistant_view(
-    db,
-    product_map: Dict[int, str],
-    sorted_product_ids: list,
-    prepare_time_series,
-    warehouse_ids: list = None
+    db, product_map: dict[int, str], sorted_product_ids: list, prepare_time_series, warehouse_ids: list = None
 ):
     """
     Renders the AI Assistant view with Raw Material and Final Product analysis modes.
-    
+
     Args:
         db: DatabaseConnector instance
         product_map: Dict mapping TowarId -> DisplayName
@@ -33,43 +29,43 @@ def render_assistant_view(
         prepare_time_series: Preprocessing function
         warehouse_ids: Optional list of warehouse IDs to filter stock
     """
-    from src.gui.views.login_view import get_current_user
     from src.config_manager import get_config_manager
-    
+    from src.gui.views.login_view import get_current_user
+
     st.subheader("🤖 Inteligentny Asystent Zakupowy")
-    
+
     # Check user role for LLM selection permissions
     user = get_current_user()
-    is_admin = user and user.get('role') == 'admin'
+    is_admin = user and user.get("role") == "admin"
     config = get_config_manager()
-    
+
     # Check Local LLM availability
     local_llm_available, local_llm_status = _check_local_llm()
-    
+
     # AI Engine Selection - ADMIN ONLY
     col_ai_1, col_ai_2 = st.columns(2)
-    
+
     # Model Selection State
     selected_models = []
     comparison_mode = False
     ollama_model = config.get_llm_settings().ollama_model
-    openrouter_model = getattr(config.get_llm_settings(), 'openrouter_model', None)
-    
+    openrouter_model = getattr(config.get_llm_settings(), "openrouter_model", None)
+
     with col_ai_1:
         if is_admin:
             # Full selection for admins
             ai_options = ["Ollama (Local Server)", "Google Gemini (Cloud)", "OpenRouter (Cloud)"]
-            
+
             if local_llm_available:
                 ai_options.insert(0, "🚀 Local LLM (Embedded)")
-            
+
             ai_source = st.radio("Wybierz Silnik AI:", ai_options)
-            
+
             if "Local LLM" in ai_source:
                 # Scan for valid models (filter out incomplete/corrupt files)
                 available_models = []
                 incomplete_models = []
-                
+
                 if MODELS_DIR.exists():
                     for f in MODELS_DIR.glob("*.gguf"):
                         size_mb = f.stat().st_size / (1024**2)
@@ -77,15 +73,15 @@ def render_assistant_view(
                             available_models.append(f.name)
                         else:
                             incomplete_models.append((f.name, size_mb))
-                
+
                 if incomplete_models:
                     st.warning(f"⚠️ Niekompletne modele: {', '.join([m[0] for m in incomplete_models])}")
-                
+
                 if not available_models:
                     st.error("Brak modeli .gguf w folderze /models!")
                 else:
                     comparison_mode = st.checkbox("🆚 Tryb Porównania", help="Porównaj 2 modele")
-                    
+
                     if comparison_mode:
                         col_m1, col_m2 = st.columns(2)
                         with col_m1:
@@ -98,35 +94,34 @@ def render_assistant_view(
                     else:
                         selected_model = st.selectbox("Wybierz Model:", available_models, index=0)
                         selected_models.append(selected_model)
-            
+
             if "Ollama" in ai_source:
                 ollama_model = st.selectbox("Model Ollama:", ["llama3.2", "ministral-3:8b"])
         else:
             # READ-ONLY for non-admins - use assigned or global settings
-            username = user.get('username') if user else None
+            username = user.get("username") if user else None
             ai_source = config.get_user_llm_engine(username)
             assigned_model = config.get_user_llm_model(username)
-            
+
             st.info(f"🔒 **Przypisany silnik AI:** {ai_source}")
-            
+
             if "Local LLM" in ai_source:
                 st.caption(f"📦 Model: {assigned_model}")
                 selected_models.append(assigned_model)
             elif "Ollama" in ai_source:
                 ollama_model = config.get_llm_settings().ollama_model
                 st.caption(f"📦 Model Ollama: {ollama_model}")
-            
+
             st.caption("ℹ️ Ustawienia AI konfiguruje administrator")
 
-    
     if is_admin:
         with col_ai_2:
             # Show engine status - ADMIN ONLY
             st.markdown("**Status silników AI:**")
-            
+
             if local_llm_available:
                 st.success(f"🟢 Local LLM: {local_llm_status}")
-            
+
             # OpenRouter Status
             if "OpenRouter" in ai_source:
                 openrouter_configured = _check_openrouter_configured()
@@ -134,7 +129,7 @@ def render_assistant_view(
                     st.success("🟢 OpenRouter: Skonfigurowany")
                 else:
                     st.warning("🟡 OpenRouter: Brak klucza API")
-            
+
             # Always show Gemini status
             gemini_configured = _check_gemini_configured()
             if gemini_configured:
@@ -144,9 +139,9 @@ def render_assistant_view(
 
             # Local LLM helper...
             if local_llm_available:
-                 # Helper to find models
+                # Helper to find models
                 model_files = list(MODELS_DIR.glob("*.gguf")) if MODELS_DIR.exists() else []
-                
+
                 with st.expander("🛠️ Zarządzanie Modelami"):
                     st.write(f"Folder modeli: `{MODELS_DIR}`")
                     st.write(f"Znaleziono {len(model_files)} plików .gguf")
@@ -157,40 +152,43 @@ def render_assistant_view(
             else:
                 st.warning(f"🟡 Local LLM: {local_llm_status}")
                 with st.expander("Jak skonfigurować Local LLM?"):
-                    st.markdown("""
+                    st.markdown(
+                        """
                     1. Pobierz model GGUF (np. DeepSeek R1, Mistral)
                     2. Umieść w folderze `models/`
                     3. Wybierz model w menu po lewej
-                    """)
-            
+                    """
+                    )
 
-
-    
     # --- MODE SELECTION: RAW MATERIAL vs FINAL PRODUCT ---
     st.markdown("---")
-    
+
     # Security info banner
     if "Gemini" in ai_source or "OpenRouter" in ai_source:
         st.info("🔒 **Bezpieczeństwo:** Twoje dane są anonimizowane przed wysłaniem do AI (NIP, PESEL, email)")
     elif "Local LLM" in ai_source:
         st.success("🔒 **Prywatność:** Dane przetwarzane lokalnie - nic nie opuszcza Twojego komputera")
-    
+
     analysis_mode = st.radio(
-        "Tryb Analizy:", 
-        ["Analiza Surowca (Anomalie)", "Analiza Wyrobu Gotowego (BOM)"], 
-        horizontal=True
+        "Tryb Analizy:", ["Analiza Surowca (Anomalie)", "Analiza Wyrobu Gotowego (BOM)"], horizontal=True
     )
-    
+
     if analysis_mode == "Analiza Surowca (Anomalie)":
         _render_raw_material_analysis(
-            db, product_map, sorted_product_ids, 
-            prepare_time_series, ai_source, ollama_model, openrouter_model,
-            selected_models, comparison_mode, warehouse_ids
+            db,
+            product_map,
+            sorted_product_ids,
+            prepare_time_series,
+            ai_source,
+            ollama_model,
+            openrouter_model,
+            selected_models,
+            comparison_mode,
+            warehouse_ids,
         )
     else:
         _render_final_product_analysis(
-            db, ai_source, ollama_model, openrouter_model,
-            selected_models, comparison_mode, warehouse_ids
+            db, ai_source, ollama_model, openrouter_model, selected_models, comparison_mode, warehouse_ids
         )
 
 
@@ -198,6 +196,7 @@ def _check_local_llm() -> tuple:
     """Check if Local LLM is available."""
     try:
         from src.ai_engine.local_llm import check_local_llm_available
+
         return check_local_llm_available()
     except ImportError:
         return False, "Module not found"
@@ -208,14 +207,17 @@ def _check_local_llm() -> tuple:
 def _check_gemini_configured() -> bool:
     """Check if Gemini API key is configured."""
     import os
+
     from dotenv import load_dotenv
+
     from src.config_manager import get_config_manager
+
     load_dotenv()
-    
+
     # Check env
-    if os.getenv('GEMINI_API_KEY'):
+    if os.getenv("GEMINI_API_KEY"):
         return True
-        
+
     # Check config
     try:
         config = get_config_manager()
@@ -227,14 +229,17 @@ def _check_gemini_configured() -> bool:
 def _check_openrouter_configured() -> bool:
     """Check if OpenRouter API key is configured."""
     import os
+
     from dotenv import load_dotenv
+
     from src.config_manager import get_config_manager
+
     load_dotenv()
-    
+
     # Check env
-    if os.getenv('OPENROUTER_API_KEY'):
+    if os.getenv("OPENROUTER_API_KEY"):
         return True
-        
+
     # Check config
     try:
         config = get_config_manager()
@@ -244,34 +249,39 @@ def _check_openrouter_configured() -> bool:
 
 
 def _render_raw_material_analysis(
-    db, product_map, sorted_product_ids, 
-    prepare_time_series, ai_source, ollama_model, openrouter_model,
-    selected_models=[], comparison_mode=False, warehouse_ids=None
+    db,
+    product_map,
+    sorted_product_ids,
+    prepare_time_series,
+    ai_source,
+    ollama_model,
+    openrouter_model,
+    selected_models=[],
+    comparison_mode=False,
+    warehouse_ids=None,
 ):
     """Renders raw material anomaly analysis."""
     selected_product_ai = st.selectbox(
-        "Wybierz Surowiec do Analizy AI:", 
-        sorted_product_ids,
-        format_func=lambda x: product_map.get(x, str(x))
+        "Wybierz Surowiec do Analizy AI:", sorted_product_ids, format_func=lambda x: product_map.get(x, str(x))
     )
-    
+
     if st.button("Generuj Analizę Ekspercką (Surowiec)"):
         with st.spinner("Analizowanie danych i generowanie odpowiedzi..."):
             # Prepare Context
             df_hist = db.get_historical_data()
             df_clean = prepare_time_series(df_hist)
-            df_prod = df_clean[df_clean['TowarId'] == selected_product_ai].copy()
-            
+            df_prod = df_clean[df_clean["TowarId"] == selected_product_ai].copy()
+
             # Fetch current stock for context (with warehouse filter)
             df_stock = db.get_current_stock(warehouse_ids=warehouse_ids)
             current_stock = 0
-            if not df_stock.empty and 'TowarId' in df_stock.columns:
-                 # Ensure numeric type for matching
-                df_stock['TowarId'] = pd.to_numeric(df_stock['TowarId'], errors='coerce').fillna(0).astype(int)
-                stock_row = df_stock[df_stock['TowarId'] == selected_product_ai]
+            if not df_stock.empty and "TowarId" in df_stock.columns:
+                # Ensure numeric type for matching
+                df_stock["TowarId"] = pd.to_numeric(df_stock["TowarId"], errors="coerce").fillna(0).astype(int)
+                stock_row = df_stock[df_stock["TowarId"] == selected_product_ai]
                 if not stock_row.empty:
-                    current_stock = stock_row.iloc[0]['StockLevel']
-            
+                    current_stock = stock_row.iloc[0]["StockLevel"]
+
             if df_prod.empty:
                 st.warning(
                     f"Brak danych historycznych dla produktu: "
@@ -279,10 +289,10 @@ def _render_raw_material_analysis(
                     "Nie można wygenerować analizy."
                 )
                 return
-            
+
             # Stats - with proper validation
-            last_4_weeks = df_prod['Quantity'].tail(4).tolist()
-            
+            last_4_weeks = df_prod["Quantity"].tail(4).tolist()
+
             # Validate that we have sufficient data
             if not last_4_weeks or len(last_4_weeks) < 2:
                 st.warning(
@@ -293,55 +303,61 @@ def _render_raw_material_analysis(
                 avg_consumption = last_4_weeks[0] if last_4_weeks else 0
             else:
                 avg_consumption = sum(last_4_weeks) / len(last_4_weeks)
-            
+
             product_name = product_map.get(selected_product_ai, f"ID {selected_product_ai}")
-            
+
             # Context string for warehouses
             mag_context = f"(wybrane magazyny: {len(warehouse_ids)})" if warehouse_ids else "(wszystkie magazyny)"
-            
+
             prompt = f"""
             Jesteś ekspertem ds. łańcucha dostaw. Przeanalizuj sytuację dla surowca: {product_name}.
-            
+
             DANE:
             - Obecny stan magazynowy {mag_context}: {current_stock:.2f}
             - Ostatnie 4 tygodnie zużycia: {last_4_weeks}
             - Średnie zużycie tygodniowe: {avg_consumption:.2f}
-            
+
             PYTANIA:
             1. Czy trend zużycia jest rosnący czy malejący?
             2. Na ile tygodni wystarczy obecny zapas (Coverage)?
             3. Czy sugerujesz zwiększenie zapasów?
             4. Jakie mogą być przyczyny anomalii (jeśli występują)?
-            
+
             Odpowiedz krótko i konkretnie w języku polskim.
             """
-            
+
             response_text = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model)
-            
+
             st.markdown("### 💡 Wnioski AI")
-            
+
             if comparison_mode and len(selected_models) == 2:
                 # Benchmark Mode
                 col_res1, col_res2 = st.columns(2)
-                
+
                 with col_res1:
                     st.markdown(f"**Model A: {selected_models[0]}**")
-                    with st.spinner(f"Geneowanie (Model A)..."):
+                    with st.spinner("Geneowanie (Model A)..."):
                         path_a = str(MODELS_DIR / selected_models[0])
-                        resp_a = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_a)
+                        resp_a = _generate_ai_response(
+                            prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_a
+                        )
                         st.info(resp_a)
-                
+
                 with col_res2:
                     st.markdown(f"**Model B: {selected_models[1]}**")
-                    with st.spinner(f"Generowanie (Model B)..."):
+                    with st.spinner("Generowanie (Model B)..."):
                         path_b = str(MODELS_DIR / selected_models[1])
-                        resp_b = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_b)
+                        resp_b = _generate_ai_response(
+                            prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_b
+                        )
                         st.success(resp_b)
-                        
+
             else:
                 # Single Mode
                 model_path = str(MODELS_DIR / selected_models[0]) if selected_models else None
-                response_text = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=model_path)
+                response_text = _generate_ai_response(
+                    prompt, ai_source, ollama_model, openrouter_model, local_model_path=model_path
+                )
                 st.write(response_text)
 
             with st.expander("Pokaż Prompt (Debug)"):
@@ -349,76 +365,80 @@ def _render_raw_material_analysis(
 
 
 def _render_final_product_analysis(
-    db, ai_source, ollama_model, openrouter_model,
-    selected_models=[], comparison_mode=False, warehouse_ids=None
+    db, ai_source, ollama_model, openrouter_model, selected_models=[], comparison_mode=False, warehouse_ids=None
 ):
     """Renders final product (BOM) analysis with warehouse filtering."""
     with st.spinner("Pobieranie listy wyrobów gotowych..."):
         df_tech_prods = db.get_products_with_technology()
-    
+
     if df_tech_prods.empty:
         st.info("Brak zdefiniowanych technologii w systemie.")
         return
-    
-    tech_map = dict(zip(
-        df_tech_prods['FinalProductId'], 
-        df_tech_prods['Name'] + " (" + df_tech_prods['Code'] + ")"
-    ))
-    
+
+    tech_map = dict(
+        zip(df_tech_prods["FinalProductId"], df_tech_prods["Name"] + " (" + df_tech_prods["Code"] + ")", strict=False)
+    )
+
     selected_final_prod_ai = st.selectbox(
         "Wybierz Wyrób Gotowy do produkcji:",
-        df_tech_prods['FinalProductId'],
-        format_func=lambda x: tech_map.get(x, str(x))
+        df_tech_prods["FinalProductId"],
+        format_func=lambda x: tech_map.get(x, str(x)),
     )
-    
+
     plan_qty = st.number_input("Planowana ilość produkcji (szt):", min_value=1, value=100)
-    
+
     if st.button("Generuj Analizę Zakupową (BOM)"):
         with st.spinner("Pobieranie BOM i generowanie porady..."):
             # Get BOM with stock for selected warehouses
             df_bom_ai = db.get_bom_with_stock(selected_final_prod_ai, warehouse_ids=warehouse_ids)
-            
+
             if df_bom_ai.empty:
                 st.warning("Brak zdefiniowanej technologii dla tego wyrobu.")
                 return
-            
+
             # Get warehouse breakdown for AI context (all warehouses)
             df_warehouse_breakdown = db.get_bom_with_warehouse_breakdown(selected_final_prod_ai)
-            
+
             # Calculate deficits
-            df_bom_ai['RequiredTotal'] = df_bom_ai['QuantityPerUnit'] * plan_qty
-            df_bom_ai['Deficit'] = df_bom_ai['RequiredTotal'] - df_bom_ai['CurrentStock']
-            df_bom_ai['Status'] = df_bom_ai['Deficit'].apply(lambda x: 'BRAK' if x > 0 else 'OK')
-            
+            df_bom_ai["RequiredTotal"] = df_bom_ai["QuantityPerUnit"] * plan_qty
+            df_bom_ai["Deficit"] = df_bom_ai["RequiredTotal"] - df_bom_ai["CurrentStock"]
+            df_bom_ai["Status"] = df_bom_ai["Deficit"].apply(lambda x: "BRAK" if x > 0 else "OK")
+
             # Prepare text summary for AI (selected warehouses)
-            bom_summary = df_bom_ai[['IngredientName', 'RequiredTotal', 'CurrentStock', 'Status']].to_string(index=False)
-            
+            bom_summary = df_bom_ai[["IngredientName", "RequiredTotal", "CurrentStock", "Status"]].to_string(
+                index=False
+            )
+
             # Prepare warehouse breakdown for AI (other warehouses context)
             warehouse_context = ""
             if not df_warehouse_breakdown.empty and warehouse_ids:
                 # Group by ingredient and show stock per warehouse
-                warehouse_summary = df_warehouse_breakdown.groupby(
-                    ['IngredientCode', 'IngredientName', 'MagSymbol']
-                )['StockInWarehouse'].sum().reset_index()
-                
+                warehouse_summary = (
+                    df_warehouse_breakdown.groupby(["IngredientCode", "IngredientName", "MagSymbol"])[
+                        "StockInWarehouse"
+                    ]
+                    .sum()
+                    .reset_index()
+                )
+
                 if not warehouse_summary.empty:
                     warehouse_context = f"""
-            
+
             UWAGA - Stany na INNYCH magazynach (możliwe do przesunięcia):
             {warehouse_summary.to_string(index=False)}
             """
-            
+
             # Build enhanced prompt with warehouse context
             selected_mag_info = f"(wybrane magazyny: {len(warehouse_ids)})" if warehouse_ids else "(wszystkie magazyny)"
-            
+
             prompt = f"""
             Jesteś asystentem zakupowym w fabryce. Planujemy produkcję wyrobu: {tech_map[selected_final_prod_ai]}.
             Ilość do wyprodukowania: {plan_qty} szt.
-            
+
             Oto analiza zapotrzebowania na surowce (BOM vs Magazyn) {selected_mag_info}:
             {bom_summary}
             {warehouse_context}
-            
+
             Zadanie:
             1. Wskaż krytyczne braki (co musimy pilnie zamówić?).
             2. Jeśli są surowce na innych magazynach - zasugeruj przesunięcie międzymagazynowe.
@@ -426,89 +446,99 @@ def _render_final_product_analysis(
             4. Podaj rekomendację dla działu zakupów.
             Odpowiedz krótko i konkretnie w języku polskim.
             """
-            
+
             st.markdown("### 💡 Raport Zakupowy AI")
-            
+
             if comparison_mode and len(selected_models) == 2:
                 # Benchmark Mode
                 col_res1, col_res2 = st.columns(2)
-                
+
                 with col_res1:
                     st.markdown(f"**Model A: {selected_models[0]}**")
-                    with st.spinner(f"Geneowanie (Model A)..."):
+                    with st.spinner("Geneowanie (Model A)..."):
                         path_a = str(MODELS_DIR / selected_models[0])
-                        resp_a = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_a)
+                        resp_a = _generate_ai_response(
+                            prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_a
+                        )
                         st.info(resp_a)
-                
+
                 with col_res2:
                     st.markdown(f"**Model B: {selected_models[1]}**")
-                    with st.spinner(f"Generowanie (Model B)..."):
+                    with st.spinner("Generowanie (Model B)..."):
                         path_b = str(MODELS_DIR / selected_models[1])
-                        resp_b = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_b)
+                        resp_b = _generate_ai_response(
+                            prompt, ai_source, ollama_model, openrouter_model, local_model_path=path_b
+                        )
                         st.success(resp_b)
-                        
+
             else:
                 # Single Mode
                 model_path = str(MODELS_DIR / selected_models[0]) if selected_models else None
-                response_text = _generate_ai_response(prompt, ai_source, ollama_model, openrouter_model, local_model_path=model_path)
+                response_text = _generate_ai_response(
+                    prompt, ai_source, ollama_model, openrouter_model, local_model_path=model_path
+                )
                 st.write(response_text)
-            
+
             with st.expander("Szczegóły kalkulacji (Tabela)"):
                 st.dataframe(
                     df_bom_ai.style.applymap(
-                        lambda v: 'color: red;' if v == 'BRAK' else 'color: green;', 
-                        subset=['Status']
+                        lambda v: "color: red;" if v == "BRAK" else "color: green;", subset=["Status"]
                     )
                 )
             with st.expander("Pokaż Prompt (Debug)"):
                 st.code(prompt)
 
 
-def _generate_ai_response(prompt: str, ai_source: str, ollama_model: str, openrouter_model: str, local_model_path: Optional[str] = None) -> str:
+def _generate_ai_response(
+    prompt: str, ai_source: str, ollama_model: str, openrouter_model: str, local_model_path: Optional[str] = None
+) -> str:
     """
     Generates AI response using selected engine.
     Handles Gemini, Ollama, OpenRouter, and Local LLM with proper error handling.
     """
     try:
         from src.ai_engine.anonymizer import DataAnonymizer
+
         anonymizer = DataAnonymizer()
         safe_prompt = anonymizer.anonymize_text(prompt)
 
         if "Gemini" in ai_source:
             from src.ai_engine.gemini_client import GeminiClient
             from src.config_manager import get_config_manager
-            
-            key = getattr(get_config_manager().get_llm_settings(), 'gemini_api_key', None)
+
+            key = getattr(get_config_manager().get_llm_settings(), "gemini_api_key", None)
             client = GeminiClient(api_key=key)
             return client.generate_explanation(safe_prompt)
-        
+
         elif "OpenRouter" in ai_source:
             from src.ai_engine.openrouter_client import OpenRouterClient
             from src.config_manager import get_config_manager
-            
+
             config = get_config_manager()
             settings = config.get_llm_settings()
-            
+
             # Get model and key from config
-            model_id = getattr(settings, 'openrouter_model', None)
-            api_key = getattr(settings, 'openrouter_api_key', None)
-            
+            model_id = getattr(settings, "openrouter_model", None)
+            api_key = getattr(settings, "openrouter_api_key", None)
+
             client = OpenRouterClient(model_id=model_id, api_key=api_key)
             return client.generate_explanation(safe_prompt)
-        
+
         elif "Local LLM" in ai_source:
             from src.ai_engine.local_llm import LocalLLMEngine
+
             # Use specific model path if provided, else fallback to env/default
             client = LocalLLMEngine(model_path=local_model_path)
             start_t = time.time()
             resp = client.generate_explanation(prompt)
             duration = time.time() - start_t
             return f"{resp}\n\n_(Czas generowania: {duration:.1f}s)_"
-        
+
         else:  # Ollama
             from src.ai_engine.ollama_client import OllamaClient
+
             client = OllamaClient(model_name=ollama_model)
             return client.generate_explanation(prompt)
-            
+
     except Exception as e:
         return f"Błąd podczas generowania odpowiedzi AI ({ai_source}): {str(e)}"

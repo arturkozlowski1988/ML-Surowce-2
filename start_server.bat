@@ -3,10 +3,10 @@ REM ============================================
 REM AI Supply Assistant - Network Server Launcher
 REM For Windows Server deployment
 REM ============================================
-REM 
+REM
 REM This script starts the Streamlit server configured
 REM for network access from other computers on the LAN.
-REM 
+REM
 REM PREREQUISITES:
 REM   1. Python 3.9+ installed
 REM   2. Dependencies: pip install -r requirements.txt

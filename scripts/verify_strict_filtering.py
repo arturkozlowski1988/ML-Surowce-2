@@ -1,13 +1,15 @@
-import sys
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.db_connector import DatabaseConnector
-import pandas as pd
+
 
 def verify_strict_filtering():
     print("--- Verifying Strict Filtering (CZE_Typ 1,2) ---")
     db = DatabaseConnector()
-    
+
     # 1. Historical Data
     print("\n1. Fetching Historical Data...")
     try:
@@ -34,7 +36,7 @@ def verify_strict_filtering():
 
     # 3. Usage Stats (Specific ID - assuming we found one in hist)
     if not df_hist.empty:
-        test_id = df_hist['TowarId'].iloc[0]
+        test_id = df_hist["TowarId"].iloc[0]
         print(f"\n3. Fetching Usage Stats for ID {test_id}...")
         try:
             df_usage = db.get_product_usage_stats(int(test_id))
@@ -45,6 +47,7 @@ def verify_strict_filtering():
                 print("Info: No usage stats for this specific ID (might be old history).")
         except Exception as e:
             print(f"FAILED: {e}")
+
 
 if __name__ == "__main__":
     verify_strict_filtering()

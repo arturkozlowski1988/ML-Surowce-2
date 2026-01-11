@@ -19,3 +19,7 @@ huggingface_hub>=0.20.0
 requests>=2.28.0
 openai>=1.0.0
 
+# Development & Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+ruff>=0.1.0

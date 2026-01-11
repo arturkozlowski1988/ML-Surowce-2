@@ -2,24 +2,26 @@
 Comprehensive verification of ZP (Production Orders) - TH (Technology) - BOM relations
 in the CTI Production module database.
 """
-import sys
-import os
 import io
+import os
+import sys
 
 # Fix encoding for Windows console (CP1250 -> UTF-8)
-if sys.platform == 'win32':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.db_connector import DatabaseConnector
 import pandas as pd
+
+from src.db_connector import DatabaseConnector
+
 
 def run_verification():
     print("=" * 60)
     print("WERYFIKACJA RELACJI ZP-TH-BOM (CTI DATABASE)")
     print("=" * 60)
-    
+
     try:
         db = DatabaseConnector()
         print("[OK] Polaczenie z baza: OK\n")
@@ -30,7 +32,7 @@ def run_verification():
     # 1. Check CtiZlecenieNag (ZP - Production Orders) structure
     print("--- 1. STRUKTURA CtiZlecenieNag (Zlecenia Produkcyjne ZP) ---")
     q1 = """
-    SELECT 
+    SELECT
         COUNT(*) as TotalZP,
         SUM(CASE WHEN CZN_CTNId IS NOT NULL AND CZN_CTNId > 0 THEN 1 ELSE 0 END) as WithTechnology,
         SUM(CASE WHEN CZN_TwrId IS NOT NULL AND CZN_TwrId > 0 THEN 1 ELSE 0 END) as WithProduct
@@ -38,12 +40,12 @@ def run_verification():
     """
     df1 = db.execute_query(q1)
     print(df1.to_string(index=False))
-    total_zp = df1['TotalZP'].iloc[0] if not df1.empty else 0
-    
+    total_zp = df1["TotalZP"].iloc[0] if not df1.empty else 0
+
     # 2. Check CtiTechnolNag (TH - Technologies) structure
     print("\n--- 2. STRUKTURA CtiTechnolNag (Technologie TH) ---")
     q2 = """
-    SELECT 
+    SELECT
         COUNT(*) as TotalTH,
         SUM(CASE WHEN CTN_Status > 0 THEN 1 ELSE 0 END) as ActiveTH,
         SUM(CASE WHEN CTN_TwrId IS NOT NULL AND CTN_TwrId > 0 THEN 1 ELSE 0 END) as WithProduct
@@ -51,14 +53,14 @@ def run_verification():
     """
     df2 = db.execute_query(q2)
     print(df2.to_string(index=False))
-    total_th = df2['TotalTH'].iloc[0] if not df2.empty else 0
+    total_th = df2["TotalTH"].iloc[0] if not df2.empty else 0
 
     # 3. Check CtiTechnolElem (Tech Elements - BOM items)
     print("\n--- 3. STRUKTURA CtiTechnolElem (Elementy Technologii - BOM) ---")
     q3 = """
-    SELECT 
+    SELECT
         CTE_Typ as Typ,
-        CASE CTE_Typ 
+        CASE CTE_Typ
             WHEN 1 THEN 'Surowiec z cecha'
             WHEN 2 THEN 'Surowiec'
             WHEN 3 THEN 'Odpad'
@@ -98,7 +100,7 @@ def run_verification():
     # 5. Verify BOM for a sample product with technology
     print("\n--- 5. PRZYKLADOWY BOM DLA WYROBU Z TECHNOLOGIA ---")
     q5 = """
-    SELECT TOP 1 
+    SELECT TOP 1
         CTN_TwrId as FinalProductId,
         CTN_ID as TH_ID,
         t.Twr_Kod as ProductCode,
@@ -109,13 +111,13 @@ def run_verification():
     """
     df5 = db.execute_query(q5)
     df_tech_prods = pd.DataFrame()  # Initialize
-    
+
     if not df5.empty:
-        final_id = df5['FinalProductId'].iloc[0]
-        th_id = df5['TH_ID'].iloc[0]
+        final_id = df5["FinalProductId"].iloc[0]
+        th_id = df5["TH_ID"].iloc[0]
         print(f"Wyrob: {df5['ProductName'].iloc[0]} ({df5['ProductCode'].iloc[0]})")
         print(f"TH ID: {th_id}\n")
-        
+
         # Get BOM for this TH
         q_bom = f"""
         SELECT TOP 10
@@ -123,7 +125,7 @@ def run_verification():
             t.Twr_Kod as SurowiecKod,
             e.CTE_Ilosc as Ilosc,
             t.Twr_JM as JM,
-            CASE e.CTE_Typ 
+            CASE e.CTE_Typ
                 WHEN 1 THEN 'Sur+Cecha'
                 WHEN 2 THEN 'Surowiec'
                 WHEN 3 THEN 'Odpad'
@@ -158,7 +160,7 @@ def run_verification():
     print("\n--- 7. WERYFIKACJA METODY get_bom_with_stock ---")
     try:
         if not df_tech_prods.empty:
-            sample_id = int(df_tech_prods['FinalProductId'].iloc[0])
+            sample_id = int(df_tech_prods["FinalProductId"].iloc[0])
             df_bom_stock = db.get_bom_with_stock(sample_id)
             print(f"BOM ze stanami dla produktu ID={sample_id}:")
             if not df_bom_stock.empty:
@@ -187,7 +189,7 @@ def run_verification():
         print(df8.to_string(index=False))
     else:
         print("Brak danych o zuzyciu surowcow.")
-    
+
     # 9. Final summary
     print("\n" + "=" * 60)
     print("PODSUMOWANIE WERYFIKACJI")
@@ -200,6 +202,7 @@ def run_verification():
     print("  CtiZlecenieNag.CZN_CTNId -> CtiTechnolNag.CTN_ID (ZP -> TH)")
     print("  CtiTechnolNag.CTN_TwrId -> CDN.Towary.Twr_TwrId (TH -> Wyrob)")
     print("  CtiTechnolElem.CTE_CTNId -> CtiTechnolNag.CTN_ID (BOM -> TH)")
-    
+
+
 if __name__ == "__main__":
     run_verification()

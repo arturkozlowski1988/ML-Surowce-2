@@ -1,6 +1,6 @@
 # AI Supply Assistant - Deployment Guide
 
-> **Wersja**: 1.5.0  
+> **Wersja**: 1.5.0
 > **Środowisko**: Windows Server + MS SQL Server
 
 ---
@@ -145,10 +145,10 @@ Dla produkcji - automatyczny start po restarcie serwera.
 
    ```powershell
    nssm install AISupplyAssistant "C:\Python39\python.exe" "-m streamlit run C:\Apps\AISupplyAssistant\main.py --server.address 0.0.0.0 --server.port 8501 --server.headless true"
-   
+
    # Ustaw katalog roboczy
    nssm set AISupplyAssistant AppDirectory "C:\Apps\AISupplyAssistant"
-   
+
    # Uruchom usługę
    nssm start AISupplyAssistant
    ```
@@ -158,13 +158,13 @@ Dla produkcji - automatyczny start po restarcie serwera.
    ```powershell
    # Status
    nssm status AISupplyAssistant
-   
+
    # Restart
    nssm restart AISupplyAssistant
-   
+
    # Stop
    nssm stop AISupplyAssistant
-   
+
    # Usuń usługę
    nssm remove AISupplyAssistant confirm
    ```

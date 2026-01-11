@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
     AI Supply Assistant - Windows Uninstaller Script
-    
+
 .DESCRIPTION
     Removes the Windows Service and cleans up firewall rules.
     Does NOT remove application files or configuration.
-    
+
 .PARAMETER ServiceName
     Name of the Windows Service to remove (default: AISupplyAssistant)
-    
+
 .PARAMETER RemoveFirewall
     Also remove the firewall rule
-    
+
 .EXAMPLE
     .\Uninstall-AISupplyAssistant.ps1
 #>
@@ -53,7 +53,7 @@ if ($service) {
     Write-Info "Stopping service..."
     Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
-    
+
     # Try NSSM first
     $nssmPath = Join-Path (Get-Location).Path "tools\nssm.exe"
     if (Test-Path $nssmPath) {
@@ -72,7 +72,7 @@ if ($service) {
 # Remove Firewall Rule
 if ($RemoveFirewall) {
     Write-Step "Removing firewall rule..."
-    
+
     $rule = Get-NetFirewallRule -DisplayName $AppName -ErrorAction SilentlyContinue
     if ($rule) {
         Remove-NetFirewallRule -DisplayName $AppName

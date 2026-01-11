@@ -13,16 +13,16 @@ Output:
 """
 
 import os
-import sys
 import shutil
 import subprocess
-from pathlib import Path
+import sys
 
 
 def check_requirements():
     """Check if PyInstaller is installed."""
     try:
         import PyInstaller
+
         print(f"✅ PyInstaller version: {PyInstaller.__version__}")
         return True
     except ImportError:
@@ -33,7 +33,7 @@ def check_requirements():
 
 def clean_build_dirs():
     """Clean previous build artifacts."""
-    dirs_to_clean = ['build', 'dist', '__pycache__']
+    dirs_to_clean = ["build", "dist", "__pycache__"]
     for dir_name in dirs_to_clean:
         if os.path.exists(dir_name):
             shutil.rmtree(dir_name)
@@ -42,7 +42,7 @@ def clean_build_dirs():
 
 def create_spec_file():
     """Create PyInstaller spec file with optimized settings."""
-    spec_content = '''# -*- mode: python ; coding: utf-8 -*-
+    spec_content = """# -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec file for AI Supply Assistant
 
 import os
@@ -139,16 +139,16 @@ exe = EXE(
     entitlements_file=None,
     icon=None,  # Add icon path if available
 )
-'''
-    
-    with open('ai_supply_assistant.spec', 'w', encoding='utf-8') as f:
+"""
+
+    with open("ai_supply_assistant.spec", "w", encoding="utf-8") as f:
         f.write(spec_content)
     print("📝 Created ai_supply_assistant.spec")
 
 
 def create_launcher_script():
     """Create a launcher batch file for the packaged app."""
-    launcher_content = '''@echo off
+    launcher_content = """@echo off
 REM AI Supply Assistant Launcher
 REM This script starts the Streamlit application
 
@@ -179,16 +179,16 @@ REM Start the application
 streamlit run main.py --server.headless true --server.port 8501
 
 pause
-'''
-    
-    with open('run_app.bat', 'w', encoding='utf-8') as f:
+"""
+
+    with open("run_app.bat", "w", encoding="utf-8") as f:
         f.write(launcher_content)
     print("📝 Created run_app.bat launcher")
 
 
 def create_readme_deployment():
     """Create deployment README."""
-    readme_content = '''# AI Supply Assistant - Deployment Guide
+    readme_content = """# AI Supply Assistant - Deployment Guide
 
 ## Quick Start
 
@@ -240,9 +240,9 @@ For fully offline operation:
 - Verify `LOCAL_LLM_PATH` points to valid .gguf file
 - Check you have enough RAM
 - Try smaller model (Qwen2-1.5B: 1.1GB)
-'''
-    
-    with open('DEPLOYMENT.md', 'w', encoding='utf-8') as f:
+"""
+
+    with open("DEPLOYMENT.md", "w", encoding="utf-8") as f:
         f.write(readme_content)
     print("📝 Created DEPLOYMENT.md")
 
@@ -251,22 +251,24 @@ def build_executable():
     """Run PyInstaller to create the executable."""
     print("\n🔨 Building executable...")
     print("This may take several minutes...\n")
-    
+
     # Use spec file if exists, otherwise use basic command
-    if os.path.exists('ai_supply_assistant.spec'):
+    if os.path.exists("ai_supply_assistant.spec"):
         cmd = [sys.executable, "-m", "PyInstaller", "ai_supply_assistant.spec", "--clean"]
     else:
         cmd = [
-            sys.executable, "-m", "PyInstaller",
+            sys.executable,
+            "-m",
+            "PyInstaller",
             "--name=AI_Supply_Assistant",
             "--onefile",  # Single executable
             "--console",  # Show console for Streamlit
             "--clean",
-            "main.py"
+            "main.py",
         ]
-    
+
     result = subprocess.run(cmd, capture_output=False)
-    
+
     if result.returncode == 0:
         print("\n✅ Build successful!")
         print("📦 Output: dist/AI_Supply_Assistant.exe")
@@ -282,11 +284,11 @@ def main():
     print("AI Supply Assistant - Build Script")
     print("=" * 50)
     print()
-    
+
     # Check requirements
     if not check_requirements():
         sys.exit(1)
-    
+
     # Ask user for clean build
     print()
     print("Options:")
@@ -294,9 +296,9 @@ def main():
     print("2. Create packaging files only")
     print("3. Build only (keep existing files)")
     print()
-    
+
     choice = input("Select option [1-3]: ").strip()
-    
+
     if choice == "1":
         clean_build_dirs()
         create_spec_file()

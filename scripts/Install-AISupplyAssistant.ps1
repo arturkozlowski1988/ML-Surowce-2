@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     AI Supply Assistant - Windows Installer Script
-    
+
 .DESCRIPTION
     Automated installation script that:
     - Verifies prerequisites (Python, ODBC Driver)
@@ -9,22 +9,22 @@
     - Configures Windows Firewall
     - Sets up Windows Service using NSSM
     - Creates configuration files
-    
+
 .PARAMETER InstallPath
     Path where the application is installed (default: current directory)
-    
+
 .PARAMETER Port
     Port for the web application (default: 8501)
-    
+
 .PARAMETER SkipService
     Skip Windows Service installation
-    
+
 .PARAMETER SkipFirewall
     Skip firewall configuration
-    
+
 .EXAMPLE
     .\Install-AISupplyAssistant.ps1
-    
+
 .EXAMPLE
     .\Install-AISupplyAssistant.ps1 -Port 80 -InstallPath "C:\Apps\AISupplyAssistant"
 #>
@@ -122,10 +122,10 @@ $odbcDriver = Get-OdbcDriver | Where-Object { $_.Name -like "*ODBC Driver 17*" }
 if (-not $odbcDriver) {
     Write-Warn "ODBC Driver 17 for SQL Server not found!"
     Write-Info "Attempting to download and install..."
-    
+
     $odbcUrl = "https://go.microsoft.com/fwlink/?linkid=2249006"
     $odbcInstaller = "$env:TEMP\msodbcsql.msi"
-    
+
     try {
         Invoke-WebRequest -Uri $odbcUrl -OutFile $odbcInstaller -UseBasicParsing
         Start-Process msiexec.exe -ArgumentList "/i `"$odbcInstaller`" /quiet /norestart IACCEPTMSODBCSQLLICENSETERMS=YES" -Wait -NoNewWindow
@@ -188,15 +188,15 @@ if (-not (Test-Path $envPath)) {
 # ============================================
 if (-not $SkipFirewall) {
     Write-Step "Configuring Windows Firewall..."
-    
+
     $ruleName = $AppName
     $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
-    
+
     if ($existingRule) {
         Write-Info "Updating existing firewall rule..."
         Remove-NetFirewallRule -DisplayName $ruleName
     }
-    
+
     try {
         New-NetFirewallRule -DisplayName $ruleName `
             -Direction Inbound `
@@ -219,29 +219,29 @@ if (-not $SkipFirewall) {
 # ============================================
 if (-not $SkipService) {
     Write-Step "Setting up Windows Service..."
-    
+
     $nssmPath = Join-Path $InstallPath "tools\nssm.exe"
     $toolsDir = Join-Path $InstallPath "tools"
-    
+
     # Download NSSM if not present
     if (-not (Test-Path $nssmPath)) {
         Write-Info "Downloading NSSM (Non-Sucking Service Manager)..."
-        
+
         if (-not (Test-Path $toolsDir)) {
             New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
         }
-        
+
         $nssmZip = "$env:TEMP\nssm.zip"
         try {
             # Use embedded NSSM or download
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             Invoke-WebRequest -Uri $NssmUrl -OutFile $nssmZip -UseBasicParsing
             Expand-Archive -Path $nssmZip -DestinationPath $env:TEMP -Force
-            
+
             # Find and copy the appropriate nssm.exe
             $arch = if ([Environment]::Is64BitOperatingSystem) { "win64" } else { "win32" }
             $nssmExtracted = Get-ChildItem -Path "$env:TEMP\nssm-*\$arch\nssm.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-            
+
             if ($nssmExtracted) {
                 Copy-Item $nssmExtracted.FullName $nssmPath
                 Write-OK "NSSM downloaded and installed"
@@ -254,7 +254,7 @@ if (-not $SkipService) {
             $SkipService = $true
         }
     }
-    
+
     if (-not $SkipService -and (Test-Path $nssmPath)) {
         # Remove existing service if present
         $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -264,20 +264,20 @@ if (-not $SkipService) {
             & $nssmPath remove $ServiceName confirm 2>&1 | Out-Null
             Start-Sleep -Seconds 2
         }
-        
+
         # Install new service
         Write-Info "Installing Windows Service..."
-        
+
         $mainPy = Join-Path $InstallPath "main.py"
         $streamlitArgs = "-m streamlit run `"$mainPy`" --server.address 0.0.0.0 --server.port $Port --server.headless true"
-        
+
         & $nssmPath install $ServiceName $pythonPath $streamlitArgs
         & $nssmPath set $ServiceName AppDirectory $InstallPath
         & $nssmPath set $ServiceName DisplayName $AppName
         & $nssmPath set $ServiceName Description "AI-powered supply chain assistant for ERP systems"
         & $nssmPath set $ServiceName Start SERVICE_AUTO_START
         & $nssmPath set $ServiceName ObjectName "LocalSystem"
-        
+
         # Set up logging
         $logDir = Join-Path $InstallPath "logs"
         if (-not (Test-Path $logDir)) {
@@ -287,15 +287,15 @@ if (-not $SkipService) {
         & $nssmPath set $ServiceName AppStderr (Join-Path $logDir "service_stderr.log")
         & $nssmPath set $ServiceName AppRotateFiles 1
         & $nssmPath set $ServiceName AppRotateBytes 1048576
-        
+
         Write-OK "Windows Service '$ServiceName' installed"
-        
+
         # Ask to start service
         $startNow = Read-Host "  Start the service now? (Y/n)"
         if ($startNow -ne 'n' -and $startNow -ne 'N') {
             & $nssmPath start $ServiceName
             Start-Sleep -Seconds 3
-            
+
             $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
             if ($service.Status -eq 'Running') {
                 Write-OK "Service started successfully!"
@@ -319,7 +319,7 @@ $shortcutPath = Join-Path $desktopPath "$AppName.url"
 try {
     $serverIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" -and $_.IPAddress -notlike "169.*" } | Select-Object -First 1).IPAddress
     if (-not $serverIP) { $serverIP = "localhost" }
-    
+
     $shortcutContent = @"
 [InternetShortcut]
 URL=http://${serverIP}:$Port
@@ -353,7 +353,7 @@ Write-Host ""
 if (-not $SkipService) {
     Write-Host "  Service Management:" -ForegroundColor Cyan
     Write-Host "    Start:   " -NoNewline; Write-Host "nssm start $ServiceName" -ForegroundColor Gray
-    Write-Host "    Stop:    " -NoNewline; Write-Host "nssm stop $ServiceName" -ForegroundColor Gray  
+    Write-Host "    Stop:    " -NoNewline; Write-Host "nssm stop $ServiceName" -ForegroundColor Gray
     Write-Host "    Restart: " -NoNewline; Write-Host "nssm restart $ServiceName" -ForegroundColor Gray
     Write-Host "    Status:  " -NoNewline; Write-Host "Get-Service $ServiceName" -ForegroundColor Gray
     Write-Host ""

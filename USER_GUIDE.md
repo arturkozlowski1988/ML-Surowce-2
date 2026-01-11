@@ -1,6 +1,6 @@
 # 📖 Instrukcja Obsługi: AI Supply Assistant
 
-> **Wersja**: 1.5.0  
+> **Wersja**: 1.5.0
 > **Data aktualizacji**: 2026-01-10
 
 ---

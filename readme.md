@@ -4,7 +4,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-red.svg)](https://streamlit.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Inteligentny Asystent Zakupowy** dla modułu Produkcja by CTI / Comarch Optima.  
+**Inteligentny Asystent Zakupowy** dla modułu Produkcja by CTI / Comarch Optima.
 System wspiera działy zakupów i produkcji w analizie zużycia surowców, prognozowaniu popytu oraz wykrywaniu anomalii przy użyciu Sztucznej Inteligencji.
 
 ---

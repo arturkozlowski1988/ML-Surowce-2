@@ -1,8 +1,8 @@
 # Dokumentacja Techniczna: AI Supply Assistant
 
-> **Wersja**: 1.5.0  
-> **Data aktualizacji**: 2026-01-10  
-> **System**: ERP Comarch Optima / Produkcja by CTI  
+> **Wersja**: 1.5.0
+> **Data aktualizacji**: 2026-01-10
+> **System**: ERP Comarch Optima / Produkcja by CTI
 > **Środowisko**: Python 3.9+, MS SQL Server, Streamlit
 
 ---
@@ -213,22 +213,22 @@ Stany magazynowe.
 -- Performance optimization indexes
 
 -- 1. Index for raw material filtering
-CREATE INDEX IX_CtiZlecenieElem_TwrId_Typ 
+CREATE INDEX IX_CtiZlecenieElem_TwrId_Typ
 ON dbo.CtiZlecenieElem(CZE_TwrId, CZE_Typ);
 -- Reason: Przyspiesza filtrowanie surowców (CZE_Typ IN (1,2))
 
 -- 2. Index for historical data date range queries
-CREATE INDEX IX_CtiZlecenieNag_DataRealizacji 
+CREATE INDEX IX_CtiZlecenieNag_DataRealizacji
 ON dbo.CtiZlecenieNag(CZN_DataRealizacji);
 -- Reason: Przyspiesza zapytania z zakresem dat (get_historical_data)
 
 -- 3. Index for technology elements lookup
-CREATE INDEX IX_CtiTechnolElem_CTNId 
+CREATE INDEX IX_CtiTechnolElem_CTNId
 ON dbo.CtiTechnolElem(CTE_CTNId);
 -- Reason: Przyspiesza odczyt BOM (get_product_bom)
 
 -- 4. Index for technology by product
-CREATE INDEX IX_CtiTechnolNag_TwrId 
+CREATE INDEX IX_CtiTechnolNag_TwrId
 ON dbo.CtiTechnolNag(CTN_TwrId);
 -- Reason: Przyspiesza wyszukiwanie technologii dla produktu
 ```
@@ -315,7 +315,7 @@ db.clear_cache("historical_data")  # Konkretny klucz
 **Query SQL** (uproszczony):
 
 ```sql
-SELECT 
+SELECT
     DATEPART(ISO_WEEK, n.CZN_DataRealizacji) as Week,
     YEAR(n.CZN_DataRealizacji) as Year,
     e.CZE_TwrId as TowarId,
@@ -323,7 +323,7 @@ SELECT
 FROM dbo.CtiZlecenieElem e WITH (NOLOCK)
 JOIN dbo.CtiZlecenieNag n WITH (NOLOCK) ON e.CZE_CZNId = n.CZN_ID
 JOIN CDN.Towary t WITH (NOLOCK) ON e.CZE_TwrId = t.Twr_TwrId
-WHERE n.CZN_DataRealizacji IS NOT NULL 
+WHERE n.CZN_DataRealizacji IS NOT NULL
   AND e.CZE_Typ IN (1, 2)      -- Tylko surowce
   AND t.Twr_Typ != 2            -- Wykluczenie usług
   [AND n.CZN_DataRealizacji >= :date_from]  -- Opcjonalny filtr
@@ -588,7 +588,7 @@ GradientBoostingRegressor(
 
 ```python
 df['Date'] = df.apply(
-    lambda row: pd.Timestamp.fromisocalendar(int(row['Year']), int(row['Week']), 1), 
+    lambda row: pd.Timestamp.fromisocalendar(int(row['Year']), int(row['Week']), 1),
     axis=1
 )
 ```
@@ -947,6 +947,6 @@ streamlit run main.py --server.port 8501 --server.address 0.0.0.0
 
 **KONIEC DOKUMENTACJI TECHNICZNEJ**
 
-**Wersja**: 1.0  
-**Status**: ✅ Kompletna - Wszystkie moduły udokumentowane  
+**Wersja**: 1.0
+**Status**: ✅ Kompletna - Wszystkie moduły udokumentowane
 **Ostatnia aktualizacja**: 2024-12-29

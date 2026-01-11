@@ -1,0 +1,54 @@
+[project]
+name = "ai-supply-assistant"
+version = "1.0.0"
+description = "AI-powered supply management assistant with ML forecasting"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests requiring database connection",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [
+    "scripts/",  # Legacy scripts - not maintained
+    ".venv",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "W",   # pycodestyle warnings
+]
+ignore = [
+    "E501",  # line too long - handled by formatter
+    "E402",  # module level import not at top - common in conditional imports
+    "E722",  # bare except - sometimes needed for cleanup
+    "F401",  # imported but unused - often for type checking
+    "F821",  # undefined name - sometimes in conditional imports
+    "F841",  # local variable unused - sometimes intentional
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/__pycache__/*", "tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
