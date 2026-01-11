@@ -74,3 +74,4 @@ scripts/archive/
 *.spec
 build/
 dist/
+config/secrets.json

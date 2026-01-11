@@ -2,10 +2,10 @@
   "llm": {
     "default_engine": "OpenRouter (Cloud - 100+ modeli)",
     "default_model": "qwen2.5-7b-instruct-q3_k_m.gguf",
-    "gemini_api_key": "AIzaSyBKQ4IfKtb8sMcl50xmPd53Hy2x_5tWqYI",
+    "gemini_api_key": "",
     "ollama_host": "http://localhost:11434",
     "ollama_model": "llama3.2",
-    "openrouter_api_key": "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",
+    "openrouter_api_key": "",
     "openrouter_model": "xiaomi/mimo-v2-flash:free"
   },
   "prompts": {
