@@ -3,14 +3,15 @@ import os
 import time
 from logging.handlers import RotatingFileHandler
 from typing import Optional
+from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
 # Ensure logs directory exists
-LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
+LOG_DIR = Path(__file__).parent.parent / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Configure logging for diagnostics with both console and file handlers
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -18,7 +19,7 @@ logger = logging.getLogger("DatabaseConnector")
 
 # Add RotatingFileHandler for persistent logging (5MB max per file, 5 backup files)
 file_handler = RotatingFileHandler(
-    os.path.join(LOG_DIR, "db_connector.log"),
+    LOG_DIR / "db_connector.log",
     maxBytes=5 * 1024 * 1024,  # 5MB
     backupCount=5,
     encoding="utf-8",
@@ -1515,7 +1516,7 @@ class DatabaseConnector:
             df_orders = self.execute_query(q_orders, query_name="dashboard_orders")
             if not df_orders.empty:
                 result["orders"]["total"] = int(df_orders["Count"].sum())
-                result["orders"]["by_status"] = dict(zip(df_orders["StatusName"], df_orders["Count"], strict=False))
+                result["orders"]["by_status"] = dict(zip(df_orders["StatusName"], df_orders["Count"]))
         except Exception as e:
             logger.debug(f"Dashboard orders error: {e}")
 
@@ -1565,7 +1566,7 @@ class DatabaseConnector:
             if not df_res.empty:
                 result["resources"]["total"] = int(df_res["ResourceCount"].sum())
                 result["resources"]["by_department"] = dict(
-                    zip(df_res["Department"].fillna("Brak").tolist(), df_res["ResourceCount"].tolist(), strict=False)
+                    zip(df_res["Department"].fillna("Brak").tolist(), df_res["ResourceCount"].tolist())
                 )
         except Exception as e:
             logger.debug(f"Dashboard resources error: {e}")
