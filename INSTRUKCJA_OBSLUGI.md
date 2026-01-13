@@ -14,8 +14,8 @@
 4. [Główne Moduły](#główne-moduły)
    - [Analiza Danych (Historie Zużycia)](#moduł-analiza-danych)
    - [Predykcja Popytu (ML)](#moduł-predykcja-ml)
-   - [Inteligentny Asystent (AI/LLM)](#moduł-ai-assistant)
    - [MRP Lite (Symulacja Produkcji)](#moduł-mrp-lite)
+   - [Inteligentny Asystent (AI/LLM)](#moduł-ai-assistant)
 5. [Panel Administracyjny](#panel-administracyjny)
 6. [Rozwiązywanie Problemów](#rozwiązywanie-problemów)
 
@@ -26,9 +26,9 @@
 **AI Supply Assistant** to zaawansowane narzędzie wspierające działy zakupów i produkcji. System integruje się z Twoim oprogramowaniem ERP (Comarch Optima / CTI), aby pomagać w podejmowaniu lepszych decyzji zakupowych.
 
 **Co zyskujesz?**
-- 📉 Mniejsze ryzyko przestojów dzięki predykcji braków.
-- 💰 Optymalizację stanów magazynowych (nie kupujesz "na zapas").
-- ⏱️ Oszczędność czasu przy analizie BOM (AI robi to za Ciebie).
+- 📉 **Mniejsze ryzyko przestojów** dzięki predykcji braków (z wyprzedzeniem do 4 tygodni).
+- 💰 **Optymalizację stanów magazynowych** – algorytmy ML podpowiadają, ile dokładnie zamówić.
+- ⏱️ **Oszczędność czasu** przy analizie BOM (AI automatycznie analizuje strukturę wyrobu).
 
 ---
 
@@ -36,28 +36,27 @@
 
 ### Uruchomienie aplikacji
 
-Jeśli aplikacja jest zainstalowana na serwerze, otwórz przeglądarkę (Chrome, Edge, Firefox) i wpisz adres podany przez administratora IT, np.:
-
-```
-http://192.168.1.100:8501
-```
+Aplikacja jest dostępna przez przeglądarkę internetową. Skontaktuj się z administratorem IT, aby uzyskać adres (np. `http://serwer-produkcja:8501`).
 
 ### Pierwsze kroki
 
-1. Zaloguj się swoimi danymi.
-2. W menu bocznym (po lewej) wybierz moduł, który Cię interesuje.
-3. Skorzystaj z filtrów daty i magazynów, aby zawęzić dane.
+1. **Zaloguj się** swoimi danymi domenowymi lub utworzonym kontem.
+2. W **Panelu Bocznym** (po lewej) wybierz bazę danych (jeśli masz dostęp do kilku).
+3. Wybierz **Magazyn**, który Cię interesuje (lub zostaw puste, by widzieć wszystkie).
+4. Przejdź do modułu **Analiza Danych**, aby zobaczyć ogólny stan zapasów.
 
 ---
 
 ## Logowanie i Uprawnienia
 
+System obsługuje dwa główne poziomy dostępu:
+
 | Rola | Dostępne funkcje |
 |------|------------------|
-| **Administrator** | Pełny dostęp, zarządzanie użytkownikami, konfiguracja AI i baz danych. |
-| **Zakupowiec** | Analiza, Predykcja, AI Assistant, MRP Lite. Brak dostępu do ustawień systemowych. |
+| **Administrator** | Pełny dostęp do wszystkich modułów, zarządzanie użytkownikami, konfiguracja połączeń DB, pobieranie modeli AI, audyt logów. |
+| **Zakupowiec** | Analiza Danych, Predykcja (ML), MRP Lite, AI Assistant. Brak dostępu do ustawień systemowych i zarządzania kontami. |
 
-> 🔒 **Bezpieczeństwo**: Po pierwszym logowaniu zmień hasło klikając w swój profil lub prosząc administratora.
+> 🔒 **Bezpieczeństwo**: Hasła są szyfrowane. Jeśli zapomnisz hasła, skontaktuj się z Administratorem w celu jego zresetowania.
 
 ---
 
@@ -65,95 +64,93 @@ http://192.168.1.100:8501
 
 ### Moduł: Analiza Danych
 
-Tu sprawdzisz historię. Jak zmieniało się zużycie surowców w czasie?
+Podstawowe narzędzie do przeglądu historii.
 
-1. **Filtrowanie**: Ustaw zakres dat w panelu bocznym.
-2. **Wybór surowców**: Wybierz jeden lub więcej surowców z listy (posortowane wg zużycia).
-3. **Wykres**: Zobaczysz trend zużycia.
-4. **Panel Zakupowca** (po wybraniu 1 surowca):
-   - **Gdzie używany?**: Lista wyrobów gotowych, do których wchodzi ten surowiec.
-   - **BOM**: Podgląd receptury wyrobu.
+1. **Filtry**: Ustaw zakres dat w panelu bocznym.
+2. **Tabela zbiorcza**: Zobaczysz listę towarów posortowaną wg największego zużycia.
+3. **Szczegóły**: Kliknij na konkretny towar, aby zobaczyć:
+   - Wykres zużycia w czasie.
+   - **Gdzie używany?**: Listę wyrobów gotowych, w których ten surowiec występuje.
+   - **BOM**: Strukturę materiałową.
 
 ---
 
 ### Moduł: Predykcja ML
 
-Tu spojrzysz w przyszłość. Ile towaru będziemy potrzebować za miesiąc?
+Prognozowanie zapotrzebowania z wykorzystaniem algorytmów uczenia maszynowego.
 
-1. Wybierz surowiec.
-2. Wybierz model (algorytm):
-   - **Random Forest / Gradient Boosting**: Najlepsze do ogólnych prognoz.
-   - **LSTM (Deep Learning)**: Dla złożonych wzorców.
-   - **Exponential Smoothing**: Jeśli występuje silna sezonowość.
-3. Kliknij **Analizuj**.
+**Dostępne modele:**
+- **Random Forest / Gradient Boosting**: Najlepsze do ogólnych prognoz, uwzględniają trendy i proste sezonowości.
+- **LSTM (Deep Learning)**: Zaawansowana sieć neuronowa, skuteczna przy złożonych, nieliniowych wzorcach (wymaga więcej danych).
+- **Exponential Smoothing**: Klasyczna metoda statystyczna, idealna przy silnej, regularnej sezonowości.
 
-**Wynik**: Wykres z prognozą na 4 tygodnie w przód oraz ocena wiarygodności prognozy (MAPE - im mniej, tym lepiej).
-
----
-
-### Moduł: AI Assistant
-
-Twój wirtualny doradca. Zadawaj pytania o dane.
-
-**Dwa tryby pracy:**
-1. **Analiza Surowca (Anomalie)**: AI sprawdzi historię zużycia i podpowie, czy trend jest niepokojący (np. nagły wzrost zużycia) oraz czy obecny stan magazynowy jest bezpieczny.
-2. **Analiza Wyrobu Gotowego (BOM)**: Planujesz produkcję? AI przeanalizuje całą recepturę (drzewo BOM), sprawdzi stany wszystkich składników na magazynach i wygeneruje listę zakupową.
-
-> 💡 **Wskazówka**: Jeśli korzystasz z **Local LLM**, Twoje dane nie opuszczają firmy (pełna prywatność).
+**Jak interpretować wynik?**
+System wyświetla prognozę na **4 tygodnie** w przód. Kluczowym wskaźnikiem jest **MAPE** (Średni Błąd Procentowy) – im niższa wartość, tym prognoza jest bardziej wiarygodna.
 
 ---
 
 ### Moduł: MRP Lite
 
-Symulator produkcji i wykrywanie braków w czasie rzeczywistym.
+Symulator produkcji i centrum zarządzania brakami.
 
-#### 1. Panel Produkcyjny CTI
-Na górze widoczne są wskaźniki na żywo z systemu produkcyjnego:
-- **Aktywne Zlecenia**: Ile zleceń jest w toku.
-- **Dokumenty Braków**: Ile dokumentów sygnalizuje braki.
-- **Technologie**: Liczba aktywnych technologii.
-- **Zasoby**: Dostępne zasoby produkcyjne.
+#### 1. Panel Produkcyjny CTI (Dashboard)
+Widok "na żywo" z hali produkcyjnej (dane z systemu CTI):
+- **Aktywne Zlecenia**: Ilość otwartych zleceń produkcyjnych.
+- **Braki**: Liczba dokumentów sygnalizujących braki materiałowe.
+- **Zasoby**: Obciążenie gniazd produkcyjnych.
 
-#### 2. Symulacja "Co-Jeśli"
-Chcesz sprawdzić, czy wyprodukujesz 500 sztuk wyrobu X?
-1. Wybierz wyrób.
-2. Wpisz ilość.
+#### 2. Symulator "Co-Jeśli"
+Pozwala sprawdzić wykonalność produkcji przed wystawieniem zlecenia.
+1. Wybierz wyrób gotowy.
+2. Podaj planowaną ilość.
 3. Kliknij **Uruchom Symulację**.
 
-**Wynik**:
-- ✅ **MOŻLIWA PRODUKCJA**: Masz wszystko.
-- ⚠️ **BRAKI**: System pokaże, czego brakuje i kiedy najwcześniej to dostaniesz (jeśli zdefiniowano czasy dostaw).
-- 💡 **Inteligentne Zamienniki**: Jeśli brakuje składnika głównego, a w systemie zdefiniowano zamienniki, MRP zasugeruje ich użycie, aby uratować produkcję.
+**System sprawdzi całe drzewo produktu (BOM) i pokaże:**
+- ✅ Czy masz wystarczającą ilość wszystkich składników.
+- ⚠️ Czego brakuje i (jeśli dane są w systemie) kiedy planowana jest dostawa.
+- 🔄 **Inteligentne Zamienniki**: Jeśli brakuje składnika X, a w systemie zdefiniowano zamiennik Y o wystarczającym stanie, system zasugeruje jego użycie.
 
-#### 3. Krytyczne Braki
-Tabela pokazująca surowce, które "schodzą" najszybciej i których zapas jest krytycznie niski w stosunku do średniego zużycia.
+#### 3. Raport Krytycznych Braków
+Lista surowców, które kończą się najszybciej w stosunku do średniego zużycia tygodniowego (tzw. *Coverage*).
+
+---
+
+### Moduł: AI Assistant
+
+Czat z Twoimi danymi (GenAI).
+
+1. **Tryb Ogólny (Q&A)**: Zapytaj o cokolwiek, np. *"Jakie są trendy w zużyciu stali?"*.
+2. **Analiza Surowca (Anomalie)**: AI analizuje wybrany towar i szuka anomalii (np. nagły skok zużycia w zeszłym miesiącu).
+3. **Analiza BOM**: Wybierz wyrób, a AI przeanalizuje jego strukturę i wskaże potencjalne ryzyka w łańcuchu dostaw.
+
+> 💡 **Prywatność**: Jeśli Administrator skonfigurował **Local LLM** (np. Qwen2.5), Twoje dane firmowe są przetwarzane lokalnie i nie trafiają do chmury.
 
 ---
 
 ## Panel Administracyjny
 
-(Tylko dla Administratorów)
+(Dostępny tylko dla Administratorów)
 
-- **Użytkownicy**: Dodawanie kont i reset haseł.
-- **Pobieranie Modeli**: Zarządzanie lokalnymi modelami AI (GGUF). Zalecany model: `Qwen2.5-7B`.
-- **Konfiguracja ML**: Dostrajanie parametrów algorytmów predykcji.
-- **Audyt**: Przegląd logów bezpieczeństwa (kto, co, kiedy).
+1. **Użytkownicy**:
+   - Tworzenie nowych użytkowników.
+   - Resetowanie haseł.
+   - Przypisywanie ról (Admin/User).
+2. **Modele AI**:
+   - **Pobieranie**: Możliwość pobrania i uruchomienia lokalnych modeli językowych (format GGUF).
+   - **Konfiguracja ML**: Dostrajanie parametrów (np. `learning_rate` dla modelu Gradient Boosting).
+3. **Audyt**:
+   - Przegląd logów systemowych (logowania, błędy, kluczowe akcje użytkowników).
 
 ---
 
 ## Rozwiązywanie Problemów
 
-**❓ Nie widzę surowca na liście.**
-Sprawdź, czy surowiec ma typ "Towar" w Comarch Optima i czy był używany w wybranym zakresie dat.
-
-**❓ Symulacja trwa długo.**
-Przy skomplikowanych wyrobach (wielopoziomowe BOM) analiza może potrwać kilka sekund. Cierpliwości.
-
-**❓ Błąd "Brak modelu lokalnego".**
-Poproś administratora o pobranie modelu w Panelu Admina -> Pobieranie Modeli.
-
-**❓ Prognoza jest niedokładna.**
-Spróbuj zmienić model (np. z Random Forest na Exponential Smoothing) lub zwiększ zakres danych historycznych.
+| Problem | Rozwiązanie |
+|---------|-------------|
+| **Brak towaru na liście** | Sprawdź filtry dat oraz czy wybrano odpowiedni magazyn. Towar musi mieć historię ruchu w zadanym okresie. |
+| **Błąd połączenia z bazą** | Jeśli widzisz "🔴 Błąd połączenia", odśwież stronę (F5). Jeśli problem wraca, skontaktuj się z IT (możliwy problem z VPN lub serwerem SQL). |
+| **Symulacja trwa długo** | Przy bardzo złożonych wyrobach (wielopoziomowe BOM) analiza może potrwać do 10-15 sekund. |
+| **Brak modelu AI** | Jeśli Asystent zgłasza brak modelu, Administrator musi pobrać model w zakładce *Panel Admina -> Modele AI*. |
 
 ---
-*Dziękujemy za używanie AI Supply Assistant!*
+*Dokumentacja przygotowana dla systemu AI Supply Assistant.*
