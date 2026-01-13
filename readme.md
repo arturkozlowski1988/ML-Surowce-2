@@ -123,10 +123,7 @@ ai-supply-assistant/
 
 ## 📖 Dokumentacja
 
-- [Instrukcja Użytkownika](USER_GUIDE.md) - Przewodnik dla użytkowników końcowych
-- [Dokumentacja Techniczna](TECHNICAL_DOCUMENTATION.md) - Architektura i API
-- [Historia Zmian](CHANGELOG.md) - Changelog projektu
-- [Instrukcja Użytkownika](USER_GUIDE.md) - Przewodnik dla użytkowników końcowych
+- [**Instrukcja Obsługi (End-User)**](INSTRUKCJA_OBSLUGI.md) 👈 **Zacznij tutaj!**
 - [Dokumentacja Techniczna](TECHNICAL_DOCUMENTATION.md) - Architektura i API
 - [Historia Zmian](CHANGELOG.md) - Changelog projektu
 
