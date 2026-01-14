@@ -1,7 +1,7 @@
 # 📖 Instrukcja Obsługi: AI Supply Assistant
 
-> **Wersja**: 1.6.0
-> **Data aktualizacji**: 2026-01-10
+> **Wersja**: 1.7.0
+> **Data aktualizacji**: 2026-01-11
 > **Status**: Oficjalna dokumentacja użytkownika
 
 ---
@@ -104,6 +104,7 @@ Pozwala sprawdzić wykonalność produkcji przed wystawieniem zlecenia.
 1. Wybierz wyrób gotowy.
 2. Podaj planowaną ilość.
 3. Kliknij **Uruchom Symulację**.
+4. (Opcjonalnie) Kliknij **Pełna Analiza AI**, aby otrzymać słowny opis sytuacji i rekomendacje.
 
 **System sprawdzi całe drzewo produktu (BOM) i pokaże:**
 - ✅ Czy masz wystarczającą ilość wszystkich składników.
@@ -111,19 +112,32 @@ Pozwala sprawdzić wykonalność produkcji przed wystawieniem zlecenia.
 - 🔄 **Inteligentne Zamienniki**: Jeśli brakuje składnika X, a w systemie zdefiniowano zamiennik Y o wystarczającym stanie, system zasugeruje jego użycie.
 
 #### 3. Raport Krytycznych Braków
-Lista surowców, które kończą się najszybciej w stosunku do średniego zużycia tygodniowego (tzw. *Coverage*).
+Lista surowców, które kończą się najszybciej w stosunku do średniego zużycia tygodniowego (tzw. *Coverage*). Możliwe jest wygenerowanie wyjaśnienia przyczyn braków przez AI.
 
 ---
 
 ### Moduł: AI Assistant
 
-Czat z Twoimi danymi (GenAI).
+Inteligentny asystent zakupowy wykorzystujący Generatywną Sztuczną Inteligencję (GenAI).
 
-1. **Tryb Ogólny (Q&A)**: Zapytaj o cokolwiek, np. *"Jakie są trendy w zużyciu stali?"*.
-2. **Analiza Surowca (Anomalie)**: AI analizuje wybrany towar i szuka anomalii (np. nagły skok zużycia w zeszłym miesiącu).
-3. **Analiza BOM**: Wybierz wyrób, a AI przeanalizuje jego strukturę i wskaże potencjalne ryzyka w łańcuchu dostaw.
+> 💡 **Prywatność**: System obsługuje lokalne modele LLM (np. Qwen2.5), co gwarantuje, że Twoje dane firmowe nie trafiają do chmury. W przypadku modeli chmurowych (Gemini, OpenRouter), dane są anonimizowane.
 
-> 💡 **Prywatność**: Jeśli Administrator skonfigurował **Local LLM** (np. Qwen2.5), Twoje dane firmowe są przetwarzane lokalnie i nie trafiają do chmury.
+#### Tryby Analizy:
+
+1. **Analiza Surowca (Anomalie)**
+   - Wybierz surowiec z listy.
+   - AI przeanalizuje jego historię zużycia i obecny stan magazynowy.
+   - Otrzymasz informację o trendzie, pokryciu zapasami (coverage) oraz sugestię czy należy zwiększyć zapasy.
+
+2. **Analiza Wyrobu Gotowego (BOM)**
+   - Wybierz wyrób gotowy i podaj planowaną ilość produkcji.
+   - AI przeanalizuje cały BOM (listę materiałową) pod kątem dostępności składników.
+   - System sprawdzi również dostępność surowców na **innych magazynach** i zasugeruje ewentualne przesunięcia międzymagazynowe.
+   - Otrzymasz raport zakupowy ze wskazaniem krytycznych ryzyk dla ciągłości produkcji.
+
+#### Funkcje Zaawansowane (Administrator):
+- **Wybór silnika AI**: Możliwość przełączania między Ollama, Local LLM, Google Gemini, OpenRouter.
+- **Tryb Porównania (Benchmark)**: Możliwość uruchomienia analizy na dwóch modelach jednocześnie (np. Qwen2.5 vs Mistral), aby porównać jakość rekomendacji.
 
 ---
 
@@ -150,7 +164,7 @@ Czat z Twoimi danymi (GenAI).
 | **Brak towaru na liście** | Sprawdź filtry dat oraz czy wybrano odpowiedni magazyn. Towar musi mieć historię ruchu w zadanym okresie. |
 | **Błąd połączenia z bazą** | Jeśli widzisz "🔴 Błąd połączenia", odśwież stronę (F5). Jeśli problem wraca, skontaktuj się z IT (możliwy problem z VPN lub serwerem SQL). |
 | **Symulacja trwa długo** | Przy bardzo złożonych wyrobach (wielopoziomowe BOM) analiza może potrwać do 10-15 sekund. |
-| **Brak modelu AI** | Jeśli Asystent zgłasza brak modelu, Administrator musi pobrać model w zakładce *Panel Admina -> Modele AI*. |
+| **Brak modelu AI** | Jeśli Asystent zgłasza brak modelu, Administrator musi pobrać model w zakładce *Panel Admina -> Modele AI* lub upewnić się, że pliki `.gguf` znajdują się w katalogu `models/`. |
 
 ---
 *Dokumentacja przygotowana dla systemu AI Supply Assistant.*
