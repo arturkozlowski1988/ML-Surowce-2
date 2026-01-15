@@ -12,7 +12,7 @@
 2. [Szybki Start](#szybki-start)
 3. [Logowanie i Uprawnienia](#logowanie-i-uprawnienia)
 4. [Główne Moduły](#główne-moduły)
-   - [Analiza Danych (Historie Zużycia)](#moduł-analiza-danych)
+   - [Analiza Danych (Panel Zakupowca)](#moduł-analiza-danych)
    - [Predykcja Popytu (ML)](#moduł-predykcja-ml)
    - [MRP Lite (Symulacja Produkcji)](#moduł-mrp-lite)
    - [Inteligentny Asystent (AI/LLM)](#moduł-ai-assistant)
@@ -26,9 +26,10 @@
 **AI Supply Assistant** to zaawansowane narzędzie wspierające działy zakupów i produkcji. System integruje się z Twoim oprogramowaniem ERP (Comarch Optima / CTI), aby pomagać w podejmowaniu lepszych decyzji zakupowych.
 
 **Co zyskujesz?**
-- 📉 **Mniejsze ryzyko przestojów** dzięki predykcji braków (z wyprzedzeniem do 4 tygodni).
+- 📉 **Mniejsze ryzyko przestojów** dzięki predykcji braków i alertom.
 - 💰 **Optymalizację stanów magazynowych** – algorytmy ML podpowiadają, ile dokładnie zamówić.
 - ⏱️ **Oszczędność czasu** przy analizie BOM (AI automatycznie analizuje strukturę wyrobu).
+- 🧠 **Wsparcie AI** – lokalne i chmurowe modele językowe pomagają w analizie danych.
 
 ---
 
@@ -40,7 +41,7 @@ Aplikacja jest dostępna przez przeglądarkę internetową. Skontaktuj się z ad
 
 ### Pierwsze kroki
 
-1. **Zaloguj się** swoimi danymi domenowymi lub utworzonym kontem.
+1. **Zaloguj się** przydzielonym loginem i hasłem.
 2. W **Panelu Bocznym** (po lewej) wybierz bazę danych (jeśli masz dostęp do kilku).
 3. Wybierz **Magazyn**, który Cię interesuje (lub zostaw puste, by widzieć wszystkie).
 4. Przejdź do modułu **Analiza Danych**, aby zobaczyć ogólny stan zapasów.
@@ -49,12 +50,12 @@ Aplikacja jest dostępna przez przeglądarkę internetową. Skontaktuj się z ad
 
 ## Logowanie i Uprawnienia
 
-System obsługuje dwa główne poziomy dostępu:
+System obsługuje dwa główne poziomy dostępu (RBAC):
 
 | Rola | Dostępne funkcje |
 |------|------------------|
-| **Administrator** | Pełny dostęp do wszystkich modułów, zarządzanie użytkownikami, konfiguracja połączeń DB, pobieranie modeli AI, audyt logów. |
-| **Zakupowiec** | Analiza Danych, Predykcja (ML), MRP Lite, AI Assistant. Brak dostępu do ustawień systemowych i zarządzania kontami. |
+| **Administrator** | Pełny dostęp do wszystkich modułów. Zarządzanie użytkownikami, konfiguracja AI (modele, klucze API), strojenie parametrów ML, konfiguracja alertów, audyt logów. |
+| **Zakupowiec** | Analiza Danych, Predykcja (ML), MRP Lite, AI Assistant. Dostęp do Panelu Zakupowca. Brak dostępu do ustawień systemowych. |
 
 > 🔒 **Bezpieczeństwo**: Hasła są szyfrowane. Jeśli zapomnisz hasła, skontaktuj się z Administratorem w celu jego zresetowania.
 
@@ -64,14 +65,13 @@ System obsługuje dwa główne poziomy dostępu:
 
 ### Moduł: Analiza Danych
 
-Podstawowe narzędzie do przeglądu historii.
+Podstawowe narzędzie do przeglądu historii i struktury produktów.
 
 1. **Filtry**: Ustaw zakres dat w panelu bocznym.
-2. **Tabela zbiorcza**: Zobaczysz listę towarów posortowaną wg największego zużycia.
-3. **Szczegóły**: Kliknij na konkretny towar, aby zobaczyć:
-   - Wykres zużycia w czasie.
-   - **Gdzie używany?**: Listę wyrobów gotowych, w których ten surowiec występuje.
-   - **BOM**: Strukturę materiałową.
+2. **Wykresy**: Wizualizacja trendu zużycia dla wybranych surowców.
+3. **Panel Zakupowca**: Po wybraniu **jednego** surowca zobaczysz szczegółową analizę:
+   - **Gdzie używany?**: Wykres pokazujący wyroby gotowe, w których ten surowiec występuje.
+   - **Analiza BOM**: Możliwość podglądu pełnej struktury materiałowej wyrobu, w którym używany jest surowiec.
 
 ---
 
@@ -80,12 +80,16 @@ Podstawowe narzędzie do przeglądu historii.
 Prognozowanie zapotrzebowania z wykorzystaniem algorytmów uczenia maszynowego.
 
 **Dostępne modele:**
-- **Random Forest / Gradient Boosting**: Najlepsze do ogólnych prognoz, uwzględniają trendy i proste sezonowości.
-- **LSTM (Deep Learning)**: Zaawansowana sieć neuronowa, skuteczna przy złożonych, nieliniowych wzorcach (wymaga więcej danych).
-- **Exponential Smoothing**: Klasyczna metoda statystyczna, idealna przy silnej, regularnej sezonowości.
+- **Random Forest (Zbalansowany)**: Dobry balans między dokładnością a szybkością.
+- **Gradient Boosting (Wysoka Precyzja)**: Często najdokładniejszy, uczy się na błędach poprzedników.
+- **Exponential Smoothing (Trend/Sezonowość)**: Klasyczna metoda, idealna przy silnej, regularnej sezonowości.
+- **LSTM (Deep Learning)**: Zaawansowana sieć neuronowa, rozpoznaje złożone, nieliniowe wzorce (wymaga więcej danych i dłuższego czasu treningu).
 
-**Jak interpretować wynik?**
-System wyświetla prognozę na **4 tygodnie** w przód. Kluczowym wskaźnikiem jest **MAPE** (Średni Błąd Procentowy) – im niższa wartość, tym prognoza jest bardziej wiarygodna.
+**Interpretacja Biznesowa:**
+System nie tylko wyświetla wykres, ale generuje **wnioski biznesowe**:
+- Sumaryczne przewidywane zapotrzebowanie.
+- Trend (wzrost/spadek).
+- Rekomendacja bezpiecznego poziomu zapasów (np. 110% prognozy).
 
 ---
 
@@ -94,10 +98,10 @@ System wyświetla prognozę na **4 tygodnie** w przód. Kluczowym wskaźnikiem j
 Symulator produkcji i centrum zarządzania brakami.
 
 #### 1. Panel Produkcyjny CTI (Dashboard)
-Widok "na żywo" z hali produkcyjnej (dane z systemu CTI):
-- **Aktywne Zlecenia**: Ilość otwartych zleceń produkcyjnych.
-- **Braki**: Liczba dokumentów sygnalizujących braki materiałowe.
-- **Zasoby**: Obciążenie gniazd produkcyjnych.
+Widok "na żywo" statystyk produkcyjnych:
+- Liczba aktywnych zleceń.
+- Liczba dokumentów braków.
+- Obciążenie technologii i zasobów.
 
 #### 2. Symulator "Co-Jeśli"
 Pozwala sprawdzić wykonalność produkcji przed wystawieniem zlecenia.
@@ -105,41 +109,67 @@ Pozwala sprawdzić wykonalność produkcji przed wystawieniem zlecenia.
 2. Podaj planowaną ilość.
 3. Kliknij **Uruchom Symulację**.
 
-**System sprawdzi całe drzewo produktu (BOM) i pokaże:**
-- ✅ Czy masz wystarczającą ilość wszystkich składników.
-- ⚠️ Czego brakuje i (jeśli dane są w systemie) kiedy planowana jest dostawa.
-- 🔄 **Inteligentne Zamienniki**: Jeśli brakuje składnika X, a w systemie zdefiniowano zamiennik Y o wystarczającym stanie, system zasugeruje jego użycie.
+**Wyniki symulacji:**
+- ✅ **Status produkcji**: Czy można wyprodukować zadaną ilość?
+- ⚠️ **Braki**: Lista brakujących surowców z czasem dostawy.
+- 🔄 **Inteligentne Zamienniki (Smart Substitutes)**: Jeśli brakuje składnika, a w systemie zdefiniowano zamiennik, system go zasugeruje.
+- **Bottleneck**: Wskazanie elementu najbardziej ograniczającego produkcję.
 
-#### 3. Raport Krytycznych Braków
-Lista surowców, które kończą się najszybciej w stosunku do średniego zużycia tygodniowego (tzw. *Coverage*).
+#### 3. Dashboard Krytycznych Braków (Alerty)
+Automatyczna lista surowców, których stan jest krytyczny w stosunku do średniego zużycia.
+- 🔴 **Krytyczne**: Zapas na wyczerpaniu (domyślnie < 7 dni).
+- 🟡 **Niskie**: Zapas poniżej bezpiecznego poziomu.
 
 ---
 
 ### Moduł: AI Assistant
 
-Czat z Twoimi danymi (GenAI).
+Inteligentny asystent wspierający analizę danych (GenAI).
 
-1. **Tryb Ogólny (Q&A)**: Zapytaj o cokolwiek, np. *"Jakie są trendy w zużyciu stali?"*.
-2. **Analiza Surowca (Anomalie)**: AI analizuje wybrany towar i szuka anomalii (np. nagły skok zużycia w zeszłym miesiącu).
-3. **Analiza BOM**: Wybierz wyrób, a AI przeanalizuje jego strukturę i wskaże potencjalne ryzyka w łańcuchu dostaw.
+**Tryby pracy:**
+1. **Analiza Surowca (Anomalie)**: Wybierz surowiec, aby AI przeanalizowała historię zużycia, wykryła anomalie i oceniła bezpieczeństwo zapasu.
+2. **Analiza Wyrobu Gotowego (BOM)**: Wybierz wyrób i ilość do produkcji. AI przeanalizuje dostępność komponentów (również na innych magazynach) i zasugeruje działania dla działu zakupów.
 
-> 💡 **Prywatność**: Jeśli Administrator skonfigurował **Local LLM** (np. Qwen2.5), Twoje dane firmowe są przetwarzane lokalnie i nie trafiają do chmury.
+**Funkcje dodatkowe:**
+- **Tryb Porównania (Benchmark)**: Pozwala uruchomić analizę na dwóch różnych modelach AI jednocześnie (np. Local LLM vs Google Gemini), aby porównać jakość odpowiedzi.
+- **Wsparcie wielu silników**:
+    - **Local LLM**: Modele działające w pełni lokalnie na serwerze (np. Mistral, Llama). Pełna prywatność.
+    - **Ollama**: Integracja z lokalnym serwerem Ollama.
+    - **Chmura (Google Gemini, OpenRouter)**: Dostęp do najpotężniejszych modeli (wymaga klucza API).
+
+> ⚠️ **Uwaga**: Asystent działa w trybie zadaniowym (analiza konkretnych danych). Nie służy do ogólnych rozmów (czat ogólny).
 
 ---
 
 ## Panel Administracyjny
 
-(Dostępny tylko dla Administratorów)
+(Moduł dostępny tylko dla użytkowników z rolą Administrator)
 
-1. **Użytkownicy**:
-   - Tworzenie nowych użytkowników.
+Zarządzanie całym systemem podzielone jest na zakładki:
+
+1. **Dashboard**: Statystyki użycia systemu, liczba użytkowników, historia zapytań AI.
+2. **Użytkownicy**:
+   - Tworzenie i usuwanie kont.
    - Resetowanie haseł.
-   - Przypisywanie ról (Admin/User).
-2. **Modele AI**:
-   - **Pobieranie**: Możliwość pobrania i uruchomienia lokalnych modeli językowych (format GGUF).
-   - **Konfiguracja ML**: Dostrajanie parametrów (np. `learning_rate` dla modelu Gradient Boosting).
-3. **Audyt**:
-   - Przegląd logów systemowych (logowania, błędy, kluczowe akcje użytkowników).
+   - Przypisywanie ról (Admin/Zakupowiec).
+3. **Ustawienia LLM**:
+   - Wybór domyślnego silnika AI.
+   - Konfiguracja kluczy API (Gemini, OpenRouter).
+   - Adres serwera Ollama.
+4. **Pobieranie Modeli**:
+   - Pobieranie modeli GGUF bezpośrednio z HuggingFace.
+   - Zarządzanie lokalnymi plikami modeli (usuwanie).
+5. **Konfiguracja ML**:
+   - Zaawansowane strojenie hiperparametrów modeli (np. liczba drzew w Random Forest, epoki w LSTM).
+6. **Uprawnienia Baz**:
+   - Przypisywanie konkretnych baz danych do użytkowników.
+   - Przypisywanie domyślnych silników AI per użytkownik.
+7. **Alerty**:
+   - Konfiguracja progów dla alertów (dni zapasu).
+   - Włączanie powiadomień e-mail.
+8. **Edycja Promptów**: Modyfikacja szablonów zapytań wysyłanych do AI.
+9. **Audyt**: Przegląd szczegółowych logów aktywności użytkowników.
+10. **Ustawienia Systemowe**: Konfiguracja pamięci podręcznej (Cache TTL) i horyzontu prognoz.
 
 ---
 
@@ -148,9 +178,11 @@ Czat z Twoimi danymi (GenAI).
 | Problem | Rozwiązanie |
 |---------|-------------|
 | **Brak towaru na liście** | Sprawdź filtry dat oraz czy wybrano odpowiedni magazyn. Towar musi mieć historię ruchu w zadanym okresie. |
-| **Błąd połączenia z bazą** | Jeśli widzisz "🔴 Błąd połączenia", odśwież stronę (F5). Jeśli problem wraca, skontaktuj się z IT (możliwy problem z VPN lub serwerem SQL). |
 | **Symulacja trwa długo** | Przy bardzo złożonych wyrobach (wielopoziomowe BOM) analiza może potrwać do 10-15 sekund. |
-| **Brak modelu AI** | Jeśli Asystent zgłasza brak modelu, Administrator musi pobrać model w zakładce *Panel Admina -> Modele AI*. |
+| **Błąd API (AI)** | Sprawdź w *Panelu Admina -> Ustawienia LLM*, czy klucze API (Gemini/OpenRouter) są poprawne i mają dostępne środki. |
+| **Brak modelu Lokalnego** | Jeśli Asystent zgłasza brak modelu, Administrator musi pobrać model w zakładce *Panel Admina -> Pobieranie Modeli*. |
+| **Błąd LSTM** | Model LSTM wymaga zainstalowanej biblioteki TensorFlow. Skontaktuj się z administratorem, jeśli opcja jest nieaktywna. |
+| **Problemy z logowaniem** | Skontaktuj się z Administratorem w celu resetu hasła. |
 
 ---
 *Dokumentacja przygotowana dla systemu AI Supply Assistant.*
