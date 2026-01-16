@@ -1,7 +1,7 @@
 # Dokumentacja Techniczna: AI Supply Assistant
 
-> **Wersja**: 1.5.0
-> **Data aktualizacji**: 2026-01-10
+> **Wersja**: 1.5.1
+> **Data aktualizacji**: 2026-01-11
 > **System**: ERP Comarch Optima / Produkcja by CTI
 > **Środowisko**: Python 3.9+, MS SQL Server, Streamlit
 
@@ -78,7 +78,10 @@ ai-supply-assistant/
 │   │   ├── analysis_viewmodel.py
 │   │   └── prediction_viewmodel.py
 │   └── services/
-│       └── async_loader.py      # Async data loading
+│       ├── alerts.py            # Intelligent shortage detection
+│       ├── async_loader.py      # Async data loading
+│       ├── model_downloader.py  # GGUF models downloader
+│       └── mrp_simulator.py     # MRP simulation engine
 ├── scripts/                     # Utility scripts (testing, debugging)
 ├── models/                      # LLM models (GGUF format)
 └── requirements.txt
@@ -782,9 +785,43 @@ ROLLBACK  -- Safety: Rollback by default in documentation
 
 ---
 
-## Usługi Asynchroniczne
+## Usługi Systemowe
 
-### Async Data Loader
+### 1. MRP Simulator
+
+**Plik**: `src/services/mrp_simulator.py`
+
+**Cel**: Silnik symulacji produkcji i analizy BOM.
+
+**Funkcje**:
+- Rekurencyjna analiza drzewa produktu (BOM).
+- Symulacja "Co-Jeśli" (czy można wyprodukować X sztuk?).
+- Wyliczanie braków i wąskich gardeł (bottlenecks).
+- Integracja z czasami dostaw i CTI.
+
+### 2. Smart Alerts
+
+**Plik**: `src/services/alerts.py`
+
+**Cel**: System wczesnego ostrzegania o brakach.
+
+**Logika**:
+- Analiza stanów poniżej minimum (wg średniego tygodniowego zużycia).
+- Generowanie kontekstu dla AI (wyjaśnianie przyczyn braków).
+- Priorytetyzacja (Krytyczny/Niski).
+
+### 3. Model Downloader
+
+**Plik**: `src/services/model_downloader.py`
+
+**Cel**: Zarządzanie lokalnymi modelami LLM.
+
+**Funkcje**:
+- Pobieranie modeli GGUF z HuggingFace (np. Qwen2.5, Llama 3.2).
+- Śledzenie postępu pobierania (Progress Bar).
+- Zarządzanie plikami w katalogu `models/`.
+
+### 4. Async Data Loader
 
 **Plik**: `src/services/async_loader.py`
 
@@ -947,6 +984,6 @@ streamlit run main.py --server.port 8501 --server.address 0.0.0.0
 
 **KONIEC DOKUMENTACJI TECHNICZNEJ**
 
-**Wersja**: 1.0
+**Wersja**: 1.5.1
 **Status**: ✅ Kompletna - Wszystkie moduły udokumentowane
-**Ostatnia aktualizacja**: 2024-12-29
+**Ostatnia aktualizacja**: 2026-01-11
