@@ -1,6 +1,6 @@
 # 📖 Instrukcja Obsługi: AI Supply Assistant
 
-> **Wersja**: 1.7.0
+> **Wersja**: 1.7.1
 > **Data aktualizacji**: 2026-01-11
 > **Status**: Oficjalna dokumentacja użytkownika
 
@@ -53,7 +53,7 @@ System obsługuje dwa główne poziomy dostępu:
 
 | Rola | Dostępne funkcje |
 |------|------------------|
-| **Administrator** | Pełny dostęp do wszystkich modułów, zarządzanie użytkownikami, konfiguracja połączeń DB, pobieranie modeli AI, audyt logów. |
+| **Administrator** | Pełny dostęp do wszystkich modułów, zarządzanie użytkownikami, konfiguracja połączeń DB, pobieranie modeli AI, audyt logów, konfiguracja alertów i promptów. |
 | **Zakupowiec** | Analiza Danych, Predykcja (ML), MRP Lite, AI Assistant. Brak dostępu do ustawień systemowych i zarządzania kontami. |
 
 > 🔒 **Bezpieczeństwo**: Hasła są szyfrowane. Jeśli zapomnisz hasła, skontaktuj się z Administratorem w celu jego zresetowania.
@@ -145,15 +145,41 @@ Inteligentny asystent zakupowy wykorzystujący Generatywną Sztuczną Inteligenc
 
 (Dostępny tylko dla Administratorów)
 
-1. **Użytkownicy**:
-   - Tworzenie nowych użytkowników.
-   - Resetowanie haseł.
-   - Przypisywanie ról (Admin/User).
-2. **Modele AI**:
-   - **Pobieranie**: Możliwość pobrania i uruchomienia lokalnych modeli językowych (format GGUF).
-   - **Konfiguracja ML**: Dostrajanie parametrów (np. `learning_rate` dla modelu Gradient Boosting).
-3. **Audyt**:
-   - Przegląd logów systemowych (logowania, błędy, kluczowe akcje użytkowników).
+Panel zawiera szereg narzędzi do zarządzania aplikacją, podzielonych na zakładki:
+
+1. **📊 Dashboard**
+   - Statystyki wykorzystania systemu (KPI).
+   - Historia ostatnich logowań i aktywności użytkowników.
+
+2. **👥 Użytkownicy**
+   - Tworzenie nowych użytkowników i resetowanie haseł.
+   - Przypisywanie ról (Administrator/Zakupowiec).
+
+3. **🤖 Ustawienia LLM**
+   - Wybór domyślnego silnika AI dla całej organizacji (Ollama/Local/Cloud).
+   - Wprowadzanie kluczy API dla Google Gemini i OpenRouter.
+
+4. **📥 Pobieranie Modeli**
+   - Zarządzanie lokalnymi modelami językowymi (format `.gguf`).
+   - Pobieranie rekomendowanych modeli (np. Qwen2.5-7B) bezpośrednio z HuggingFace.
+
+5. **⚙️ Konfiguracja ML**
+   - Zaawansowane dostrajanie parametrów algorytmów predykcyjnych (Random Forest, Gradient Boosting, LSTM).
+   - Możliwość zmiany horyzontu prognozy (domyślnie 4 tygodnie).
+
+6. **🔔 Alerty**
+   - Definiowanie progów dla stanów **Krytycznych** i **Niskich** (w dniach zapasu).
+   - Włączanie powiadomień e-mail oraz raportów dziennych/tygodniowych.
+
+7. **📝 Edycja Promptów**
+   - Dostosowywanie szablonów zapytań wysyłanych do AI (np. zmiana stylu odpowiedzi, języka).
+
+8. **📋 Audyt**
+   - Pełny log zdarzeń systemowych: logowania, błędy, wykonane analizy.
+   - Możliwość eksportu historii do pliku CSV.
+
+9. **🔧 Ustawienia Systemowe**
+   - Globalne parametry techniczne (np. czas życia cache, retencja logów).
 
 ---
 
@@ -165,6 +191,7 @@ Inteligentny asystent zakupowy wykorzystujący Generatywną Sztuczną Inteligenc
 | **Błąd połączenia z bazą** | Jeśli widzisz "🔴 Błąd połączenia", odśwież stronę (F5). Jeśli problem wraca, skontaktuj się z IT (możliwy problem z VPN lub serwerem SQL). |
 | **Symulacja trwa długo** | Przy bardzo złożonych wyrobach (wielopoziomowe BOM) analiza może potrwać do 10-15 sekund. |
 | **Brak modelu AI** | Jeśli Asystent zgłasza brak modelu, Administrator musi pobrać model w zakładce *Panel Admina -> Modele AI* lub upewnić się, że pliki `.gguf` znajdują się w katalogu `models/`. |
+| **LSTM niedostępny** | Wymaga instalacji biblioteki TensorFlow na serwerze. Skontaktuj się z IT. |
 
 ---
 *Dokumentacja przygotowana dla systemu AI Supply Assistant.*
